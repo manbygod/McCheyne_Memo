@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>맥체인 성경읽기</title>
+  <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+  <header class="site-header">
+    <h1 class="site-header__title"><a href="#/">맥체인 성경읽기</a></h1>
+    <nav class="site-header__nav" aria-label="주요 메뉴">
+      <a class="nav-link" href="#/" data-route="today">오늘</a>
+      <a class="nav-link" href="#/memos" data-route="memos">메모</a>
+    </nav>
+    <div class="site-header__auth" id="auth-box" hidden>
+      <span class="site-header__user" id="auth-status"></span>
+      <button type="button" class="btn" id="auth-button" data-action="auth-toggle">Google 로그인</button>
+    </div>
+    <div class="site-header__lang">
+      <label class="field__label" for="lang-select">언어</label>
+      <select class="field__control" id="lang-select" aria-label="성경 언어 선택">
+        <option value="ko">한국어 (개역한글)</option>
+        <option value="en">English (BSB)</option>
+      </select>
+    </div>
+  </header>
+
+  <main id="main" class="page" tabindex="-1">
+    <!-- 오늘의 읽기 -->
+    <section id="view-today" class="view" aria-labelledby="today-title" hidden>
+      <h2 class="view__title" id="today-title">오늘의 읽기</h2>
+      <div class="day-picker">
+        <button type="button" class="btn" data-action="day-prev" aria-label="전날">‹</button>
+        <label class="field__label" for="date-input">날짜</label>
+        <input class="field__control" type="date" id="date-input">
+        <button type="button" class="btn" data-action="day-next" aria-label="다음날">›</button>
+        <button type="button" class="btn btn--ghost" data-action="day-today">오늘</button>
+      </div>
+      <p class="view__note" id="plan-note"></p>
+      <ul class="reading-list" id="reading-list"></ul>
+    </section>
+
+    <!-- 본문 -->
+    <section id="view-reader" class="view" aria-labelledby="reader-title" hidden>
+      <div class="reader__head">
+        <a class="btn btn--ghost" id="reader-prev" href="#/">‹ 이전</a>
+        <h2 class="view__title" id="reader-title"></h2>
+        <a class="btn btn--ghost" id="reader-next" href="#/">다음 ›</a>
+      </div>
+      <p class="view__note" id="reader-note"></p>
+      <div class="passage" id="passage" lang="ko"></div>
+      <div class="selection-bar" id="selection-bar" role="toolbar" aria-label="선택한 구절 도구" hidden>
+        <span class="selection-bar__info" id="selection-info" aria-live="polite"></span>
+        <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
+        <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
+        <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
+      </div>
+    </section>
+
+    <!-- 메모 게시판 -->
+    <section id="view-memos" class="view" aria-labelledby="memos-title" hidden>
+      <h2 class="view__title" id="memos-title">메모</h2>
+      <form class="search" id="search-form" role="search">
+        <label class="field__label" for="search-input">단어 또는 레이블 검색</label>
+        <input class="field__control" type="search" id="search-input" placeholder="예: 사랑, 은혜">
+      </form>
+      <div class="toolbar" role="group" aria-label="메모 도구">
+        <button type="button" class="btn" data-action="dl-txt" aria-label="현재 목록을 텍스트 파일로 다운로드">TXT 다운로드</button>
+        <button type="button" class="btn" data-action="dl-pdf" aria-label="현재 목록을 PDF로 저장">PDF 저장</button>
+        <button type="button" class="btn" data-action="dl-json" aria-label="전체 메모를 JSON으로 내보내기">JSON 내보내기</button>
+        <label class="btn" for="import-file">JSON 가져오기</label>
+        <input class="visually-hidden" type="file" id="import-file" accept="application/json">
+        <button type="button" class="btn" data-action="labels-open" aria-label="레이블 관리">레이블 관리</button>
+      </div>
+      <p class="view__note" id="memos-summary" aria-live="polite"></p>
+      <ul class="board" id="board"></ul>
+      <nav class="pager" id="pager" aria-label="메모 페이지" hidden></nav>
+    </section>
+  </main>
+
+  <!-- 메모 작성 -->
+  <dialog class="dialog" id="memo-dialog" aria-labelledby="memo-dialog-title">
+    <form class="form" id="memo-form" method="dialog">
+      <h2 class="dialog__title" id="memo-dialog-title">메모 작성</h2>
+      <p class="form__ref" id="memo-ref"></p>
+      <ul class="memo-passages" id="memo-passages" aria-label="선택된 말씀"></ul>
+      <fieldset class="form__add">
+        <legend class="field__label">말씀 추가 (책·장·절을 골라 한 구절씩)</legend>
+        <div class="form__row">
+          <label class="field__label" for="add-book">책</label>
+          <select class="field__control" id="add-book"></select>
+          <label class="field__label" for="add-chapter">장</label>
+          <select class="field__control" id="add-chapter"></select>
+          <label class="field__label" for="add-verse">절</label>
+          <select class="field__control" id="add-verse"></select>
+          <button type="button" class="btn btn--primary" data-action="passage-add" aria-label="선택한 구절 추가">추가</button>
+        </div>
+        <p class="add-preview" id="add-preview" aria-live="polite"></p>
+      </fieldset>
+      <label class="field__label" for="memo-content">메모</label>
+      <textarea class="field__control" id="memo-content" rows="6" required></textarea>
+      <fieldset class="form__labels">
+        <legend class="field__label">레이블 (복수 선택)</legend>
+        <div class="chips" id="memo-labels"></div>
+      </fieldset>
+      <div class="form__actions">
+        <button type="button" class="btn btn--ghost" data-action="dialog-close">취소</button>
+        <button type="submit" class="btn btn--primary">저장</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 메모 읽기 -->
+  <dialog class="dialog" id="read-dialog" aria-labelledby="read-dialog-title">
+    <h2 class="dialog__title" id="read-dialog-title">메모 읽기</h2>
+    <p class="read__text" id="read-text"></p>
+    <div class="form__actions">
+      <button type="button" class="btn" data-action="dialog-close">닫기</button>
+    </div>
+  </dialog>
+
+  <!-- 절에 연결된 메모 -->
+  <dialog class="dialog" id="verse-memos-dialog" aria-labelledby="verse-memos-title">
+    <h2 class="dialog__title" id="verse-memos-title"></h2>
+    <div id="verse-memos-list"></div>
+    <div class="form__actions">
+      <button type="button" class="btn" data-action="dialog-close">닫기</button>
+    </div>
+  </dialog>
+
+  <!-- 레이블 관리 -->
+  <dialog class="dialog" id="labels-dialog" aria-labelledby="labels-dialog-title">
+    <h2 class="dialog__title" id="labels-dialog-title">레이블 관리</h2>
+    <form class="form__row" id="label-form">
+      <label class="field__label" for="label-input">새 레이블</label>
+      <input class="field__control" id="label-input" autocomplete="off" required maxlength="20">
+      <button type="submit" class="btn btn--primary">추가</button>
+    </form>
+    <ul class="chips" id="labels-list"></ul>
+    <div class="form__actions">
+      <button type="button" class="btn" data-action="dialog-close">닫기</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="print-area" id="print-area" aria-hidden="true"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

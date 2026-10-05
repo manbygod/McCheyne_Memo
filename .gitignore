@@ -1,0 +1,6 @@
+# 배포 제외: 출판물 원본 PDF, 중복/원본 플랜 파일, 작업용 프롬프트
+data/bible_macChain.pdf
+data/plan-2026-pdf.json
+data/official_plan.json
+맥체인 앱_웹 Prompt.txt
+.claude/

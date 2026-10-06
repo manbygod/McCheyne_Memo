@@ -60,10 +60,14 @@ python -m http.server 8000      # 또는: npx serve .
 4. `data/firebase-config.json`은 올리지 않으면 로컬 모드로 동작 (404는 무시됨)
 5. 공유(Web Share)는 HTTPS 필요 — Pages는 기본 HTTPS
 
+## 폰트
+영어 본문은 Source Serif 4(Adobe, SIL OFL 1.1)를 `fonts/`에 직접 번들합니다 (latin 서브셋, 가변 폰트). CDN을 쓰지 않아 외부 요청이 없고 오프라인에서도 동작합니다. 라이선스: `fonts/LICENSE-SourceSerif4.md`
+
 ## 파일 구조
 ```
 index.html  style.css  app.js
 data/       books.json plan.json labels.json memos.json bible/ko/
+fonts/      SourceSerif4-*.woff2 LICENSE-SourceSerif4.md
 scripts/    gen-data.js
 CLAUDE.md  skills.md  README.md
 ```

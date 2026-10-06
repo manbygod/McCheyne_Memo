@@ -154,7 +154,7 @@ function pageWindow(page, pages, span = 5) {
   return Array.from({ length: Math.min(span, pages) }, (_, i) => start + i);
 }
 
-/** 메모 한 건의 텍스트 (읽기 팝업·공유·TXT·PDF 공통). passageRef(memo, passage) → '요한복음 3:16' */
+/** 메모 한 건의 텍스트 (읽기 팝업·TXT·PDF 공통). passageRef(memo, passage) → '요한복음 3:16' */
 function memoToText(memo, passageRef) {
   const blocks = memo.passages
     .map((p) => [`[${passageRef(memo, p)}]`, p.text].filter(Boolean).join('\n'))
@@ -168,7 +168,16 @@ function memoToText(memo, passageRef) {
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
 }
 
-const memosToText = (memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
+/** 공유용 텍스트: 말씀 구절과 메모 내용만 (레이블·날짜 제외). 메신저에서 읽기 좋은 구분선·이모지 구성 */
+function memoToShareText(memo, passageRef) {
+  const rule = '━━━━━━━━━━━━━━';
+  const verses = memo.passages
+    .map((p) => [`📖 ${passageRef(memo, p)}`, p.text].filter(Boolean).join('\n\n'))
+    .join('\n\n');
+  return [verses, rule, `✍️ 나의 묵상\n\n${memo.content}`].join('\n\n');
+}
+
+const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
 
 /* ================= 상태 ================= */
 const state = {
@@ -684,7 +693,7 @@ function confirmDelete(m) {
   }
 }
 
-/** 읽기 팝업: PDF 저장·TXT·공유와 같은 내용 */
+/** 읽기 팝업: PDF 저장·TXT와 같은 내용 */
 function openReadDialog(m) {
   $('#read-text').textContent = memoToText(m, passageRef);
   $('#read-dialog').showModal();
@@ -692,9 +701,9 @@ function openReadDialog(m) {
 
 /* ================= 공유 / 다운로드 ================= */
 async function shareMemo(m) {
-  const text = memoToText(m, passageRef);
+  const text = memoToShareText(m, passageRef);
   if (navigator.share) {
-    try { await navigator.share({ title: `맥체인 메모 - ${refOf(m)}`, text }); return; } catch (e) {
+    try { await navigator.share({ text }); return; } catch (e) {
       if (e.name === 'AbortError') return;
     }
   }

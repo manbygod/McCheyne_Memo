@@ -145,6 +145,9 @@ textarea.field__control { width: 100%; resize: vertical; }
 .reading-list__links { display: flex; flex-wrap: wrap; gap: 8px; }
 .reading-list__empty { color: var(--c-muted); }
 
+/* bible */
+.bible-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+
 /* reader */
 .reader__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reader__head .view__title { margin: 0; text-align: center; }

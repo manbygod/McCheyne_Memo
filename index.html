@@ -15,6 +15,7 @@
     <nav class="site-header__nav" aria-label="주요 메뉴">
       <a class="nav-link" href="#/" data-route="today">오늘</a>
       <a class="nav-link" href="#/memos" data-route="memos">메모</a>
+      <a class="nav-link" href="#/bible" data-route="bible">성경</a>
     </nav>
     <div class="site-header__auth" id="auth-box" hidden>
       <span class="site-header__user" id="auth-status"></span>
@@ -42,6 +43,19 @@
       </div>
       <p class="view__note" id="plan-note"></p>
       <ul class="reading-list" id="reading-list" aria-live="polite"></ul>
+    </section>
+
+    <!-- 성경 (읽기표와 무관하게 책·장 직접 선택) -->
+    <section id="view-bible" class="view" aria-labelledby="bible-title" hidden>
+      <h2 class="view__title" id="bible-title" tabindex="-1">성경 읽기</h2>
+      <p class="view__note">읽고 싶은 책과 장을 고르세요.</p>
+      <form class="bible-picker" id="bible-form">
+        <label class="visually-hidden" for="bible-book">책</label>
+        <select class="field__control" id="bible-book"></select>
+        <label class="visually-hidden" for="bible-chapter">장</label>
+        <select class="field__control" id="bible-chapter"></select>
+        <button type="submit" class="btn btn--primary">읽기</button>
+      </form>
     </section>
 
     <!-- 본문 -->

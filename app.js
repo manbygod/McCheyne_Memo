@@ -192,6 +192,8 @@ const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passage
 const state = {
   books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null,
   lang: 'ko', date: toISODate(), query: '', page: 1,
+  origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
+  bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
   chapter: null, // {bookId, ch, verses:[{n,text}]}
   selected: new Set(),
   draft: null, // {id, lang, passages:[{bookId, chapter, verses:Set}], content, labels:Set}
@@ -403,6 +405,7 @@ function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   if (parts[0] === 'read' && bookById(parts[1])) return { name: 'reader', bookId: parts[1], ch: Number(parts[2]) || 1 };
   if (parts[0] === 'memos') return { name: 'memos' };
+  if (parts[0] === 'bible') return { name: 'bible' };
   return { name: 'today' };
 }
 
@@ -410,15 +413,19 @@ const setPageTitle = (name) => { document.title = `${name} · 맥체인 성경�
 
 async function route() {
   const r = parseRoute();
-  for (const v of ['today', 'reader', 'memos']) $(`#view-${v}`).hidden = v !== r.name;
+  for (const v of ['today', 'reader', 'memos', 'bible']) $(`#view-${v}`).hidden = v !== r.name;
   if (r.name === 'today') setPageTitle('오늘의 읽기');
   else if (r.name === 'memos') setPageTitle('메모');
+  else if (r.name === 'bible') setPageTitle('성경 읽기');
+  if (r.name !== 'reader') state.origin = r.name === 'bible' ? 'bible' : 'today';
+  const navRoute = r.name === 'reader' ? state.origin : r.name;
   document.querySelectorAll('.nav-link').forEach((a) => {
-    if (a.dataset.route === (r.name === 'memos' ? 'memos' : 'today')) a.setAttribute('aria-current', 'page');
+    if (a.dataset.route === navRoute) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   });
   if (r.name === 'today') renderToday();
   else if (r.name === 'memos') renderMemos();
+  else if (r.name === 'bible') renderBible();
   else await renderReader(r.bookId, r.ch);
 }
 
@@ -438,17 +445,33 @@ function renderToday() {
   }));
 }
 
+/* ================= 성경 (책·장 직접 선택) ================= */
+function fillChapterSelect(bookId, ch) {
+  const sel = $('#bible-chapter');
+  mount(sel, Array.from({ length: bookById(bookId).chapters }, (_, i) => h('option', { value: i + 1 }, `${i + 1}장`)));
+  sel.value = ch;
+}
+
+function renderBible() {
+  const b = state.bible;
+  if (!b.bookId) b.bookId = state.books[0].id;
+  fillBookSelect(state.lang, b.bookId, $('#bible-book'));
+  fillChapterSelect(b.bookId, b.ch);
+}
+
 /* ================= 본문 보기/구절 선택 ================= */
 async function renderReader(bookId, ch) {
   const book = bookById(bookId);
+  state.bible = { bookId, ch }; // 성경 메뉴로 돌아오면 마지막으로 읽은 곳이 선택되어 있도록
   state.selected.clear();
   updateSelectionBar();
   $('#reader-title').textContent = `${bookName(book, state.lang)} ${ch}장`;
   setPageTitle($('#reader-title').textContent);
   $('#passage').lang = state.lang;
   $('#reader-note').textContent = '';
-  const prev = ch > 1 ? `#/read/${bookId}/${ch - 1}` : '#/';
-  const next = ch < book.chapters ? `#/read/${bookId}/${ch + 1}` : '#/';
+  const home = state.origin === 'bible' ? '#/bible' : '#/'; // 첫 장 이전/마지막 장 다음은 읽던 목록으로
+  const prev = ch > 1 ? `#/read/${bookId}/${ch - 1}` : home;
+  const next = ch < book.chapters ? `#/read/${bookId}/${ch + 1}` : home;
   $('#reader-prev').href = prev;
   $('#reader-next').href = next;
   $('#reader-arrow-prev').href = prev;
@@ -541,10 +564,9 @@ function copySelection() {
 /* ================= 메모 작성 다이얼로그 ================= */
 const optionsOf = (values, labelOf = String) => values.map((v) => h('option', { value: v }, labelOf(v)));
 
-function fillBookSelect(lang, bookId) {
+function fillBookSelect(lang, bookId, sel = $('#add-book')) {
   const group = (label, tt) => h('optgroup', { label },
     state.books.filter((b) => b.testament === tt).map((b) => h('option', { value: b.id }, bookName(b, lang))));
-  const sel = $('#add-book');
   mount(sel, group(lang === 'en' ? 'Old Testament' : '구약', 'OT'), group(lang === 'en' ? 'New Testament' : '신약', 'NT'));
   sel.value = bookId;
 }
@@ -898,6 +920,11 @@ document.addEventListener('submit', (e) => {
     } else if (name) toast('이미 있는 레이블입니다.');
     input.value = '';
   } else if (e.target.id === 'search-form') e.preventDefault();
+  else if (e.target.id === 'bible-form') {
+    e.preventDefault();
+    const { bookId, ch } = state.bible;
+    location.hash = `#/read/${bookId}/${ch}`;
+  }
 });
 
 document.addEventListener('input', (e) => {
@@ -910,6 +937,11 @@ document.addEventListener('change', (e) => {
     try { localStorage.setItem(KEYS.lang, state.lang); } catch { /* 무시 */ }
     document.documentElement.lang = 'ko';
     route();
+  } else if (e.target.id === 'bible-book') {
+    state.bible = { bookId: e.target.value, ch: 1 };
+    fillChapterSelect(state.bible.bookId, 1);
+  } else if (e.target.id === 'bible-chapter') {
+    state.bible.ch = Number(e.target.value);
   } else if (e.target.id === 'add-book') {
     syncPicker({ chapter: 1 });
   } else if (e.target.id === 'add-chapter') {

@@ -180,11 +180,20 @@ textarea.field__control { width: 100%; resize: vertical; }
   background: var(--c-surface); border: 1px solid var(--c-border);
   border-radius: var(--radius); padding: 12px 14px;
 }
+.memo-card { position: relative; cursor: pointer; }
+.memo-card:hover { border-color: var(--c-primary); }
+.memo-card:has(.memo-card__open:focus-visible) { outline: 3px solid var(--c-focus); outline-offset: 2px; }
 .memo-card__ref { margin: 0; font-weight: 700; }
+.memo-card__open {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0;
+  text-align: left; cursor: pointer;
+}
+.memo-card__open:focus-visible { outline: none; } /* 포커스 링은 카드 전체에 표시 */
+.memo-card__open::after { content: ""; position: absolute; inset: 0; } /* 카드 어디를 눌러도 읽기 */
 .memo-card__verse { margin: 4px 0; font-family: var(--font-read); color: var(--c-muted); white-space: pre-line; }
 .memo-card__body { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-card__meta { margin: 4px 0; font-size: .8rem; color: var(--c-muted); }
-.memo-card__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.memo-card__actions { position: relative; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } /* 카드 전체 클릭 영역 위에 놓여 자체 버튼이 눌리도록 */
 
 .pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 16px 0; }
 .pager[hidden] { display: none; }

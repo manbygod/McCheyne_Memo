@@ -165,6 +165,7 @@ function memoToText(memo, passageRef) {
     blocks,
     '',
     memo.content,
+    '',
     memo.labels.length ? `레이블: ${memo.labels.join(', ')}` : '',
     `작성일: ${fmtDateTime(memo.createdAt)} / 수정일: ${fmtDateTime(memo.updatedAt)}`,
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
@@ -711,13 +712,14 @@ function renderPager(page, pages) {
 
 function memoCard(m, full) {
   return h('li', { class: 'memo-card', 'data-id': m.id },
-    h('p', { class: 'memo-card__ref', lang: m.lang }, refOf(m)),
+    // 카드 전체가 눌리는 영역(::after로 확장)이면서, 키보드·스크린리더용 "읽기" 버튼 역할
+    h('p', { class: 'memo-card__ref' },
+      h('button', { type: 'button', class: 'memo-card__open', lang: m.lang, 'data-action': 'memo-read', 'aria-label': `${refOf(m)} 메모 읽기` }, refOf(m))),
     memoPassagesText(m) && h('p', { class: 'memo-card__verse', lang: m.lang }, full ? memoPassagesText(m) : firstLine(memoPassagesText(m))),
     h('p', { class: 'memo-card__body' }, full ? m.content : firstLine(m.content)),
     m.labels.length > 0 && h('ul', { class: 'chips', 'aria-label': '레이블' }, m.labels.map((l) => h('li', { class: 'chip' }, l))),
     h('p', { class: 'memo-card__meta' }, `작성일 ${fmtDateTime(m.createdAt)} · 수정일 ${fmtDateTime(m.updatedAt)}`),
     h('div', { class: 'memo-card__actions' },
-      h('button', { type: 'button', class: 'btn', 'data-action': 'memo-read', 'aria-label': `${refOf(m)} 메모 읽기` }, '읽기'),
       h('a', { class: 'btn', href: `#/read/${m.passages[0].bookId}/${m.passages[0].chapter}`, 'aria-label': `${passageRef(m, m.passages[0])} 본문 보기` }, '본문'),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-edit', 'aria-label': `${refOf(m)} 메모 수정` }, '수정'),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-share', 'aria-label': `${refOf(m)} 메모 공유` }, '공유'),

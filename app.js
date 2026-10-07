@@ -155,10 +155,12 @@ function pageWindow(page, pages, span = 5) {
 }
 
 /** 메모 한 건의 텍스트 (읽기 팝업·TXT·PDF 공통). passageRef(memo, passage) → '요한복음 3:16' */
+const passageBlocks = (memo, passageRef) => memo.passages
+  .map((p) => [`[${passageRef(memo, p)}]`, p.text].filter(Boolean).join('\n'))
+  .join('\n\n');
+
 function memoToText(memo, passageRef) {
-  const blocks = memo.passages
-    .map((p) => [`[${passageRef(memo, p)}]`, p.text].filter(Boolean).join('\n'))
-    .join('\n\n');
+  const blocks = passageBlocks(memo, passageRef);
   return [
     blocks,
     '',
@@ -206,13 +208,29 @@ function h(tag, props = {}, ...kids) {
 }
 const mount = (el, ...kids) => el.replaceChildren(...kids.flat());
 
+/** 첫 번째로 존재하는 선택자의 요소로 포커스 이동 (요소가 사라진 뒤 포커스가 유실되지 않도록) */
+function focusFirst(...selectors) {
+  for (const sel of selectors) {
+    const el = document.querySelector(sel);
+    if (el) { el.focus(); return; }
+  }
+}
+
 let toastTimer;
+let dialogStatusTimer;
 function toast(msg) {
   const t = $('#toast');
   t.textContent = msg;
   t.classList.add('toast--show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('toast--show'), 2200);
+  // 모달 대화상자가 열려 있으면 바깥의 토스트는 스크린리더가 읽지 못하므로 대화상자 안의 상태 영역에도 알림
+  const inDialog = document.querySelector('dialog[open] [data-dialog-status]');
+  if (inDialog) {
+    inDialog.textContent = '';
+    clearTimeout(dialogStatusTimer);
+    dialogStatusTimer = setTimeout(() => { inDialog.textContent = msg; }, 50);
+  }
 }
 
 /* ================= 저장소 (localStorage + 선택적 Firebase) ================= */
@@ -381,9 +399,13 @@ function parseRoute() {
   return { name: 'today' };
 }
 
+const setPageTitle = (name) => { document.title = `${name} · 맥체인 성경읽기`; };
+
 async function route() {
   const r = parseRoute();
   for (const v of ['today', 'reader', 'memos']) $(`#view-${v}`).hidden = v !== r.name;
+  if (r.name === 'today') setPageTitle('오늘의 읽기');
+  else if (r.name === 'memos') setPageTitle('메모');
   document.querySelectorAll('.nav-link').forEach((a) => {
     if (a.dataset.route === (r.name === 'memos' ? 'memos' : 'today')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
@@ -415,6 +437,7 @@ async function renderReader(bookId, ch) {
   state.selected.clear();
   updateSelectionBar();
   $('#reader-title').textContent = `${bookName(book, state.lang)} ${ch}장`;
+  setPageTitle($('#reader-title').textContent);
   $('#passage').lang = state.lang;
   $('#reader-note').textContent = '';
   const prev = ch > 1 ? `#/read/${bookId}/${ch - 1}` : '#/';
@@ -428,7 +451,7 @@ async function renderReader(bookId, ch) {
   if (parseRoute().name !== 'reader') return;
   if (!verses) {
     state.chapter = null;
-    mount($('#passage'), h('p', {}, `본문(${BIBLE_FILE(state.lang, bookId)})을 불러오지 못했습니다. file:// 이 아닌 로컬 서버(README 참고)로 실행 중인지 확인하세요.`));
+    mount($('#passage'), h('p', { role: 'alert' }, `본문(${BIBLE_FILE(state.lang, bookId)})을 불러오지 못했습니다. file:// 이 아닌 로컬 서버(README 참고)로 실행 중인지 확인하세요.`));
     return;
   }
   state.chapter = { bookId, ch, verses };
@@ -446,7 +469,7 @@ function renderPassage() {
     return h('div', { class: on ? 'verse verse--selected' : 'verse', 'data-verse': v.n },
       count
         ? h('button', { type: 'button', class: 'verse__badge', 'data-action': 'verse-memos', 'data-verse': v.n, title: `메모 ${count}개`, 'aria-label': `${v.n}절에 연결된 메모 ${count}개 보기` }, v.n)
-        : h('span', { class: 'verse__num', 'aria-hidden': 'true' }, v.n),
+        : h('span', { class: 'verse__num' }, v.n), // 스크린리더도 절 번호를 읽을 수 있도록 숨기지 않음
       h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) }, v.text));
   }));
 }
@@ -456,7 +479,7 @@ function openVerseMemos(n) {
   const { bookId, ch } = state.chapter;
   const list = [...(memosByVerse(state.memos, bookId, ch).get(n) ?? [])].sort(byUpdatedDesc);
   $('#verse-memos-title').textContent = `${formatRef(bookById(bookId), state.lang, ch, [n])} · 메모 ${list.length}개`;
-  mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo' }, h('p', { class: 'read__text' }, memoToText(m, passageRef)))));
+  mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo' }, h('p', { class: 'read__text' }, memoNodes(m)))));
   $('#verse-memos-dialog').showModal();
 }
 
@@ -479,10 +502,16 @@ function toggleVerse(n, range) {
 function updateSelectionBar() {
   const bar = $('#selection-bar');
   bar.hidden = state.selected.size === 0;
+  const status = $('#selection-status'); // 항상 화면에 있는 알림 영역 (숨겨진 바 안의 live region은 읽히지 않을 수 있음)
   if (!bar.hidden && state.chapter) {
-    $('#selection-info').textContent = formatRef(bookById(state.chapter.bookId), state.lang, state.chapter.ch, [...state.selected]);
-  }
+    const ref = formatRef(bookById(state.chapter.bookId), state.lang, state.chapter.ch, [...state.selected]);
+    $('#selection-info').textContent = ref;
+    status.textContent = `${ref} 선택됨`;
+  } else status.textContent = '';
 }
+
+/** 구절 선택/메모 저장 후 사라진 버튼 대신 포커스를 둘 곳 */
+const focusVerse = (n) => document.querySelector(`.verse[data-verse="${n}"] .verse__text`)?.focus();
 
 const passageTextOf = (verses, nums) =>
   verses.filter((v) => v.text && nums.includes(v.n)).map((v) => `${v.n} ${v.text}`).join('\n');
@@ -613,8 +642,9 @@ async function saveMemo(form) {
   }));
 
   const now = new Date().toISOString();
+  const id = prev ? prev.id : newId();
   upsertMemo({
-    id: prev ? prev.id : newId(),
+    id,
     content,
     lang: d.lang,
     passages,
@@ -625,16 +655,25 @@ async function saveMemo(form) {
   $('#memo-dialog').close();
   state.selected.clear();
   toast('메모를 저장했습니다.');
-  if (parseRoute().name === 'memos') renderMemos();
-  else if (state.chapter) { renderPassage(); updateSelectionBar(); } // 새 메모의 절 번호 배지 반영
+  if (parseRoute().name === 'memos') {
+    renderMemos();
+    const card = [...document.querySelectorAll('.memo-card')].find((c) => c.dataset.id === id);
+    (card?.querySelector('button') ?? $('#search-input')).focus(); // 목록이 다시 그려져 포커스가 사라지는 것 방지
+  } else if (state.chapter) {
+    renderPassage(); updateSelectionBar(); // 새 메모의 절 번호 배지 반영
+    focusVerse(lastClicked);
+  }
 }
 
 function toggleSelectionReset() {
+  state.selected.clear();
   document.querySelectorAll('.verse--selected').forEach((el) => {
     el.classList.remove('verse--selected');
     el.querySelector('.verse__text').setAttribute('aria-pressed', 'false');
   });
   updateSelectionBar();
+  $('#selection-status').textContent = '선택을 해제했습니다.';
+  focusVerse(lastClicked); // 눌렀던 "해제" 버튼은 바와 함께 사라지므로
 }
 
 /* ================= 메모 게시판 ================= */
@@ -672,8 +711,8 @@ function renderPager(page, pages) {
 
 function memoCard(m, full) {
   return h('li', { class: 'memo-card', 'data-id': m.id },
-    h('p', { class: 'memo-card__ref' }, refOf(m)),
-    memoPassagesText(m) && h('p', { class: 'memo-card__verse' }, full ? memoPassagesText(m) : firstLine(memoPassagesText(m))),
+    h('p', { class: 'memo-card__ref', lang: m.lang }, refOf(m)),
+    memoPassagesText(m) && h('p', { class: 'memo-card__verse', lang: m.lang }, full ? memoPassagesText(m) : firstLine(memoPassagesText(m))),
     h('p', { class: 'memo-card__body' }, full ? m.content : firstLine(m.content)),
     m.labels.length > 0 && h('ul', { class: 'chips', 'aria-label': '레이블' }, m.labels.map((l) => h('li', { class: 'chip' }, l))),
     h('p', { class: 'memo-card__meta' }, `작성일 ${fmtDateTime(m.createdAt)} · 수정일 ${fmtDateTime(m.updatedAt)}`),
@@ -690,12 +729,19 @@ function confirmDelete(m) {
     deleteMemo(m.id);
     renderMemos();
     toast('삭제했습니다.');
+    focusFirst('#board button', '#search-input');
   }
+}
+
+/** memoToText 와 같은 내용이되, 말씀 부분에만 메모의 언어(lang)를 표시 — 스크린리더가 올바른 음성으로 읽도록 */
+function memoNodes(m) {
+  const blocks = passageBlocks(m, passageRef);
+  return [h('span', { lang: m.lang }, blocks), memoToText(m, passageRef).slice(blocks.length)];
 }
 
 /** 읽기 팝업: PDF 저장·TXT와 같은 내용 */
 function openReadDialog(m) {
-  $('#read-text').textContent = memoToText(m, passageRef);
+  mount($('#read-text'), memoNodes(m));
   $('#read-dialog').showModal();
 }
 
@@ -772,13 +818,21 @@ const actions = {
     openMemoDialog({ id: null, lang: state.lang, passages: [{ bookId, chapter: ch, verses: new Set(state.selected) }], content: '', labels: new Set() });
   },
   'passage-add': addPassage,
-  'passage-remove': (el) => { state.draft.passages.splice(Number(el.dataset.pi), 1); renderDraft(); },
+  'passage-remove': (el) => {
+    const [p] = state.draft.passages.splice(Number(el.dataset.pi), 1);
+    renderDraft();
+    toast(`${draftRef(state.draft, p)} 삭제`);
+    focusFirst('#memo-passages button', '#add-book');
+  },
   'verse-remove': (el) => {
     const { passages } = state.draft;
     const p = passages[Number(el.dataset.pi)];
-    p.verses.delete(Number(el.dataset.verse));
+    const n = Number(el.dataset.verse);
+    p.verses.delete(n);
     if (!p.verses.size) passages.splice(passages.indexOf(p), 1);
     renderDraft();
+    toast(`${n}절 제거`);
+    focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
   'dialog-close': (el) => el.closest('dialog').close(),
   'memo-edit': (el) => {
@@ -808,6 +862,8 @@ const actions = {
     persistLabels();
     renderLabelsDialog();
     if (state.draft) renderDraft();
+    toast(`레이블 ${el.dataset.label} 삭제`);
+    focusFirst('#labels-list button', '#label-input');
   },
 };
 
@@ -828,7 +884,8 @@ document.addEventListener('submit', (e) => {
       state.labels.push(name);
       persistLabels();
       renderLabelsDialog();
-    }
+      toast(`레이블 ${name} 추가`);
+    } else if (name) toast('이미 있는 레이블입니다.');
     input.value = '';
   } else if (e.target.id === 'search-form') e.preventDefault();
 });
@@ -858,7 +915,12 @@ document.addEventListener('change', (e) => {
   }
 });
 
-window.addEventListener('hashchange', () => { route(); $('#main').focus(); window.scrollTo(0, 0); });
+// 화면 전환 시 새 화면의 제목(h2)으로 포커스를 옮겨 스크린리더가 어디로 이동했는지 읽어 주도록 함
+window.addEventListener('hashchange', () => {
+  route();
+  (document.querySelector('.view:not([hidden]) .view__title') ?? $('#main')).focus();
+  window.scrollTo(0, 0);
+});
 
 /* ================= 시작 ================= */
 async function init() {

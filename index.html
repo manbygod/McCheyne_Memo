@@ -32,46 +32,47 @@
   <main id="main" class="page" tabindex="-1">
     <!-- 오늘의 읽기 -->
     <section id="view-today" class="view" aria-labelledby="today-title" hidden>
-      <h2 class="view__title" id="today-title">오늘의 읽기</h2>
+      <h2 class="view__title" id="today-title" tabindex="-1">오늘의 읽기</h2>
       <div class="day-picker">
         <button type="button" class="btn" data-action="day-prev" aria-label="전날">‹</button>
-        <label class="field__label" for="date-input">날짜</label>
+        <label class="visually-hidden" for="date-input">날짜</label>
         <input class="field__control" type="date" id="date-input">
         <button type="button" class="btn" data-action="day-next" aria-label="다음날">›</button>
         <button type="button" class="btn btn--ghost" data-action="day-today">오늘</button>
       </div>
       <p class="view__note" id="plan-note"></p>
-      <ul class="reading-list" id="reading-list"></ul>
+      <ul class="reading-list" id="reading-list" aria-live="polite"></ul>
     </section>
 
     <!-- 본문 -->
     <section id="view-reader" class="view" aria-labelledby="reader-title" hidden>
       <div class="reader__head">
         <a class="btn btn--ghost" id="reader-prev" href="#/">‹ 이전</a>
-        <h2 class="view__title" id="reader-title"></h2>
+        <h2 class="view__title" id="reader-title" tabindex="-1"></h2>
         <a class="btn btn--ghost" id="reader-next" href="#/">다음 ›</a>
       </div>
-      <p class="view__note" id="reader-note"></p>
+      <p class="view__note" id="reader-note" aria-live="polite"></p>
       <div class="passage" id="passage" lang="ko"></div>
       <div class="selection-bar" id="selection-bar" role="toolbar" aria-label="선택한 구절 도구" hidden>
-        <span class="selection-bar__info" id="selection-info" aria-live="polite"></span>
+        <span class="selection-bar__info" id="selection-info"></span>
         <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
         <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
         <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
       </div>
+      <p class="visually-hidden" id="selection-status" role="status"></p>
     </section>
 
     <!-- 메모 게시판 -->
     <section id="view-memos" class="view" aria-labelledby="memos-title" hidden>
-      <h2 class="view__title" id="memos-title">메모</h2>
+      <h2 class="view__title" id="memos-title" tabindex="-1">메모</h2>
       <form class="search" id="search-form" role="search">
         <label class="field__label" for="search-input">단어 또는 레이블 검색</label>
         <input class="field__control" type="search" id="search-input" placeholder="예: 사랑, 은혜">
       </form>
       <div class="toolbar" role="group" aria-label="메모 도구">
-        <button type="button" class="btn" data-action="dl-txt" aria-label="현재 목록을 텍스트 파일로 다운로드">TXT 다운로드</button>
-        <button type="button" class="btn" data-action="dl-pdf" aria-label="현재 목록을 PDF로 저장">PDF 저장</button>
-        <button type="button" class="btn" data-action="dl-json" aria-label="전체 메모를 JSON으로 내보내기">JSON 내보내기</button>
+        <button type="button" class="btn" data-action="dl-txt" aria-label="TXT 다운로드, 현재 목록을 텍스트 파일로">TXT 다운로드</button>
+        <button type="button" class="btn" data-action="dl-pdf" aria-label="PDF 저장, 현재 목록을 PDF로">PDF 저장</button>
+        <button type="button" class="btn" data-action="dl-json" aria-label="JSON 내보내기, 전체 메모를 JSON 파일로">JSON 내보내기</button>
         <label class="btn" for="import-file">JSON 가져오기</label>
         <input class="visually-hidden" type="file" id="import-file" accept="application/json">
         <button type="button" class="btn" data-action="labels-open" aria-label="레이블 관리">레이블 관리</button>
@@ -86,6 +87,7 @@
   <dialog class="dialog" id="memo-dialog" aria-labelledby="memo-dialog-title">
     <form class="form" id="memo-form" method="dialog">
       <h2 class="dialog__title" id="memo-dialog-title">메모 작성</h2>
+      <p class="visually-hidden" role="status" data-dialog-status></p>
       <p class="form__ref" id="memo-ref"></p>
       <ul class="memo-passages" id="memo-passages" aria-label="선택된 말씀"></ul>
       <fieldset class="form__add">
@@ -115,7 +117,7 @@
   </dialog>
 
   <!-- 메모 읽기 -->
-  <dialog class="dialog" id="read-dialog" aria-labelledby="read-dialog-title">
+  <dialog class="dialog" id="read-dialog" aria-labelledby="read-dialog-title" aria-describedby="read-text">
     <h2 class="dialog__title" id="read-dialog-title">메모 읽기</h2>
     <p class="read__text" id="read-text"></p>
     <div class="form__actions">
@@ -135,6 +137,7 @@
   <!-- 레이블 관리 -->
   <dialog class="dialog" id="labels-dialog" aria-labelledby="labels-dialog-title">
     <h2 class="dialog__title" id="labels-dialog-title">레이블 관리</h2>
+    <p class="visually-hidden" role="status" data-dialog-status></p>
     <form class="form__row" id="label-form">
       <label class="field__label" for="label-input">새 레이블</label>
       <input class="field__control" id="label-input" autocomplete="off" required maxlength="20">

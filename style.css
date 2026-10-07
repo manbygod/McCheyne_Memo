@@ -54,6 +54,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* 고정 헤더·선택 바에 포커스된 요소가 가려지지 않도록 */
+html { scroll-padding-top: 90px; scroll-padding-bottom: 110px; }
+
 body {
   margin: 0;
   background: var(--c-bg);

@@ -55,6 +55,12 @@ function compressRanges(nums) {
   return out.join(', ');
 }
 
+/** 터치 이동량 → 'prev'(오른쪽으로 쓸기) | 'next'(왼쪽으로 쓸기) | null. 가로로 충분히 길고 세로 스크롤과 구분될 때만 */
+function swipeDirection(dx, dy, minDist = 60) {
+  if (Math.abs(dx) < minDist || Math.abs(dx) < Math.abs(dy) * 1.5) return null;
+  return dx > 0 ? 'prev' : 'next';
+}
+
 const firstLine = (text) => {
   const lines = text.trim().split(/\r?\n/);
   return lines.length > 1 || lines[0].length > 60 ? `${lines[0].slice(0, 60)} ...` : lines[0];
@@ -445,6 +451,8 @@ async function renderReader(bookId, ch) {
   const next = ch < book.chapters ? `#/read/${bookId}/${ch + 1}` : '#/';
   $('#reader-prev').href = prev;
   $('#reader-next').href = next;
+  $('#reader-arrow-prev').href = prev;
+  $('#reader-arrow-next').href = next;
   mount($('#passage'), h('p', {}, '불러오는 중...'));
 
   let verses = null;
@@ -916,6 +924,22 @@ document.addEventListener('change', (e) => {
     e.target.value = '';
   }
 });
+
+// 본문 화면에서 손가락 쓸기: 오른쪽으로 쓸면 이전, 왼쪽으로 쓸면 다음 (이전/다음 링크와 같은 이동)
+let touchStart = null;
+const readerView = $('#view-reader');
+readerView.addEventListener('touchstart', (e) => {
+  touchStart = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+}, { passive: true });
+readerView.addEventListener('touchend', (e) => {
+  const start = touchStart;
+  touchStart = null;
+  if (!start || e.target.closest('.selection-bar') || !window.getSelection().isCollapsed) return; // 글자 선택 드래그와 구분
+  const t = e.changedTouches[0];
+  const dir = swipeDirection(t.clientX - start.x, t.clientY - start.y);
+  if (dir) location.hash = $(`#reader-${dir === 'prev' ? 'prev' : 'next'}`).getAttribute('href');
+});
+readerView.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
 
 // 화면 전환 시 새 화면의 제목(h2)으로 포커스를 옮겨 스크린리더가 어디로 이동했는지 읽어 주도록 함
 window.addEventListener('hashchange', () => {

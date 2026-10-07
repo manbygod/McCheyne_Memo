@@ -148,6 +148,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 /* reader */
 .reader__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reader__head .view__title { margin: 0; text-align: center; }
+.reader__arrow { display: none; } /* 넓은 화면에서만 표시 (아래 미디어쿼리) */
 .passage { font-family: var(--font-read); font-size: 1.125rem; line-height: 1.95; margin: 16px 0; }
 .verse { display: flex; align-items: baseline; gap: 8px; border-radius: 4px; padding: 2px 6px; cursor: pointer; }
 .verse__num { flex: none; min-width: 2em; text-align: right; font: .75rem var(--font); color: var(--c-muted); }
@@ -247,4 +248,18 @@ button.chip { cursor: pointer; color: inherit; }
 @media (min-width: 640px) {
   .page { padding-top: 24px; }
   .reading-list { grid-template-columns: 1fr 1fr; }
+}
+
+/* 본문 좌우 화살표: 본문 영역(최대 760px) 바깥 양옆에 고정 */
+@media (min-width: 1000px) and (hover: hover) {
+  .reader__arrow {
+    position: fixed; top: 50%; z-index: 5; transform: translateY(-50%);
+    display: flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 50%;
+    border: 1px solid var(--c-border); background: var(--c-surface);
+    color: var(--c-primary); font-size: 2rem; line-height: 1; text-decoration: none;
+  }
+  .reader__arrow:hover { background: var(--c-primary); color: var(--c-primary-text); }
+  .reader__arrow--prev { left: calc(50% - 380px - 76px); }
+  .reader__arrow--next { right: calc(50% - 380px - 76px); }
 }

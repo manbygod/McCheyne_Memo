@@ -51,6 +51,9 @@
         <h2 class="view__title" id="reader-title" tabindex="-1"></h2>
         <a class="btn btn--ghost" id="reader-next" href="#/">다음 ›</a>
       </div>
+      <!-- 넓은 화면(마우스)용 좌우 화살표. 위의 이전/다음 링크와 중복이므로 보조기술에는 숨김 -->
+      <a class="reader__arrow reader__arrow--prev" id="reader-arrow-prev" href="#/" aria-hidden="true" tabindex="-1">‹</a>
+      <a class="reader__arrow reader__arrow--next" id="reader-arrow-next" href="#/" aria-hidden="true" tabindex="-1">›</a>
       <p class="view__note" id="reader-note" aria-live="polite"></p>
       <div class="passage" id="passage" lang="ko"></div>
       <div class="selection-bar" id="selection-bar" role="toolbar" aria-label="선택한 구절 도구" hidden>

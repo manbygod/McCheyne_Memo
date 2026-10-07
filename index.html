@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2026-10-07a">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -110,11 +110,11 @@
       <fieldset class="form__add">
         <legend class="field__label">말씀 추가 (책·장·절을 골라 한 구절씩)</legend>
         <div class="form__row">
-          <label class="field__label" for="add-book">책</label>
+          <label class="visually-hidden" for="add-book">책</label>
           <select class="field__control" id="add-book"></select>
-          <label class="field__label" for="add-chapter">장</label>
+          <label class="visually-hidden" for="add-chapter">장</label>
           <select class="field__control" id="add-chapter"></select>
-          <label class="field__label" for="add-verse">절</label>
+          <label class="visually-hidden" for="add-verse">절</label>
           <select class="field__control" id="add-verse"></select>
           <button type="button" class="btn btn--primary" data-action="passage-add" aria-label="선택한 구절 추가">추가</button>
         </div>
@@ -169,6 +169,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2026-10-07a"></script>
 </body>
 </html>

@@ -578,7 +578,7 @@ async function syncPicker({ chapter, verse } = {}) {
   const bookId = $('#add-book').value;
   const book = bookById(bookId);
   const chSel = $('#add-chapter');
-  mount(chSel, optionsOf(Array.from({ length: book.chapters }, (_, i) => i + 1)));
+  mount(chSel, optionsOf(Array.from({ length: book.chapters }, (_, i) => i + 1), (n) => `${n}장`)); // 라벨을 숨겼으므로 항목에 단위 표기
   chSel.value = Math.min(Math.max(Number(chapter ?? chSel.value) || 1, 1), book.chapters);
 
   let verses = null;
@@ -586,7 +586,7 @@ async function syncPicker({ chapter, verse } = {}) {
   if (token !== pickerToken) return;
   const vSel = $('#add-verse');
   const readable = (verses ?? []).filter((v) => v.text);
-  mount(vSel, optionsOf(readable.map((v) => v.n)));
+  mount(vSel, optionsOf(readable.map((v) => v.n), (n) => `${n}절`));
   if (!readable.length) { $('#add-preview').textContent = '본문을 불러오지 못했습니다.'; return; }
   vSel.value = readable.some((v) => v.n === verse) ? verse : readable[0].n;
   showPreview(readable);

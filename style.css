@@ -235,7 +235,12 @@ button.chip { cursor: pointer; color: inherit; }
 .read__text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-read); line-height: 1.8; }
 .form__labels { border: 1px solid var(--c-border); border-radius: var(--radius); }
 .form__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-.view__actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 24px 0; }
+.share { margin: 24px 0; }
+.share__title {
+  display: inline-block; margin: 0 0 12px; padding: 6px 14px; font-size: 1rem; font-weight: 600;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius);
+}
+.share__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .form__actions--start { justify-content: flex-start; flex-wrap: wrap; }
 
 .toast {

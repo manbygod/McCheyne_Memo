@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-08o">
+  <link rel="stylesheet" href="style.css?v=2026-10-09b">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -43,12 +43,15 @@
       </div>
       <p class="view__note" id="plan-note"></p>
       <ul class="reading-list" id="reading-list" aria-live="polite"></ul>
-      <p class="view__actions">
-        <button type="button" class="btn btn--primary" data-action="share-meditation">PDF공유</button>
-        <button type="button" class="btn btn--primary" data-action="share-meditation-ko">PDF공유(한글)</button>
-        <button type="button" class="btn btn--primary" data-action="share-meditation-txt">TXT공유</button>
-        <button type="button" class="btn btn--primary" data-action="share-meditation-txt-ko">TXT공유(한글)</button>
-      </p>
+      <section class="share" aria-labelledby="share-title">
+        <h3 class="share__title" id="share-title">공유</h3>
+        <div class="share__actions">
+          <button type="button" class="btn btn--primary" data-action="share-meditation" aria-label="PDF 공유">PDF</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation-ko" aria-label="PDF 공유, 한글">PDF(한글)</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation-txt" aria-label="TXT 공유">TXT</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation-txt-ko" aria-label="TXT 공유, 한글">TXT(한글)</button>
+        </div>
+      </section>
     </section>
 
     <!-- 성경 (읽기표와 무관하게 책·장 직접 선택) -->
@@ -176,6 +179,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js?v=2026-10-08o"></script>
+  <script src="app.js?v=2026-10-09b"></script>
 </body>
 </html>

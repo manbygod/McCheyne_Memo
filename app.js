@@ -277,6 +277,13 @@ function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
   return out;
 }
 
+/** 오늘의 말씀묵상 공유용 텍스트: 날짜 머리말 + 메모별 공유 텍스트(말씀·묵상) */
+function meditationToShareText(memos, iso, passageRef) {
+  const date = new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' });
+  const rule = '══════════════';
+  return [`🙏 오늘의 말씀묵상\n${date}`, ...memos.map((m) => memoToShareText(m, passageRef))].join(`\n\n${rule}\n\n`);
+}
+
 const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
 
 /* ================= 상태 ================= */
@@ -894,7 +901,11 @@ function withReadMemo(el, fn) {
 
 /* ================= 공유 / 다운로드 ================= */
 async function shareMemo(m) {
-  const text = memoToShareText(m, passageRef);
+  await shareText(memoToShareText(m, passageRef));
+}
+
+/** 텍스트 공유 시트로 보내고, 지원하지 않으면 클립보드에 복사 */
+async function shareText(text) {
   if (navigator.share) {
     try { await navigator.share({ text }); return; } catch (e) {
       if (e.name === 'AbortError') return;
@@ -926,7 +937,6 @@ function memoCardLines(m, ctx) {
   });
   gap(10);
   add(m.content, `14px ${sans}`, c.text, 22);
-  if (m.labels.length) { gap(6); add(`# ${m.labels.join('  # ')}`, `12px ${sans}`, c.muted, 18); }
   return lines;
 }
 
@@ -978,6 +988,14 @@ async function toKorean(m) {
     return { ...p, text: text || p.text };
   }));
   return { ...m, lang: 'ko', passages };
+}
+
+/** 오늘의 말씀묵상 텍스트 공유 */
+async function shareMeditationText(korean = false) {
+  let memos = memosEditedOn(state.memos, state.date);
+  if (!memos.length) { toast('이 날짜에 수정한 메모가 없습니다.'); return; }
+  if (korean) memos = await Promise.all(memos.map(toKorean));
+  await shareText(meditationToShareText(memos, state.date, passageRef));
 }
 
 /** 오늘의 말씀묵상 공유: PDF를 만들어 공유 시트(문자·카톡·이메일 첨부)로 보내고, 안 되면 파일로 저장 */
@@ -1078,6 +1096,8 @@ const actions = {
   'memo-share': (el) => { el.closest('dialog')?.close(); shareMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
   'share-meditation': () => shareMeditation(),
   'share-meditation-ko': () => shareMeditation(true),
+  'share-meditation-txt': () => shareMeditationText(),
+  'share-meditation-txt-ko': () => shareMeditationText(true),
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'labels-open': () => { renderLabelsDialog(); $('#labels-dialog').showModal(); },

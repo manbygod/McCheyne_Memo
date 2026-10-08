@@ -232,6 +232,7 @@ button.chip { cursor: pointer; color: inherit; }
 .read__text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-read); line-height: 1.8; }
 .form__labels { border: 1px solid var(--c-border); border-radius: var(--radius); }
 .form__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.form__actions--start { justify-content: flex-start; flex-wrap: wrap; }
 
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);

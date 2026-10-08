@@ -511,7 +511,13 @@ function openVerseMemos(n) {
   const { bookId, ch } = state.chapter;
   const list = [...(memosByVerse(state.memos, bookId, ch).get(n) ?? [])].sort(byUpdatedDesc);
   $('#verse-memos-title').textContent = `${formatRef(bookById(bookId), state.lang, ch, [n])} · 메모 ${list.length}개`;
-  mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo' }, h('p', { class: 'read__text' }, memoNodes(m)))));
+  mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo', 'data-id': m.id },
+    h('p', { class: 'read__text' }, memoNodes(m)),
+    h('div', { class: 'form__actions form__actions--start' },
+      h('a', { class: 'btn', href: `#/read/${m.passages[0].bookId}/${m.passages[0].chapter}`, 'data-action': 'dialog-close', 'aria-label': `${refOf(m)} 본문 보기` }, '본문'),
+      h('button', { type: 'button', class: 'btn', 'data-action': 'memo-edit', 'aria-label': `${refOf(m)} 메모 수정` }, '수정'),
+      h('button', { type: 'button', class: 'btn', 'data-action': 'memo-share', 'aria-label': `${refOf(m)} 메모 공유` }, '공유'),
+      h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'memo-delete', 'aria-label': `${refOf(m)} 메모 삭제` }, '삭제')))));
   $('#verse-memos-dialog').showModal();
 }
 
@@ -759,10 +765,17 @@ function memoCard(m, full) {
 function confirmDelete(m) {
   if (window.confirm(`이 메모를 삭제할까요?\n\n${refOf(m)}\n${firstLine(m.content)}`)) {
     deleteMemo(m.id);
-    renderMemos();
+    route(); // 메모 화면이면 목록, 본문 화면이면 절 배지까지 갱신
     toast('삭제했습니다.');
     focusFirst('#board button', '#search-input');
   }
+}
+
+function editMemo(m) {
+  openMemoDialog({
+    id: m.id, lang: m.lang, content: m.content, labels: new Set(m.labels),
+    passages: m.passages.map((p) => ({ bookId: p.bookId, chapter: p.chapter, verses: new Set(p.verses) })),
+  });
 }
 
 /** memoToText 와 같은 내용이되, 말씀 부분에만 메모의 언어(lang)를 표시 — 스크린리더가 올바른 음성으로 읽도록 */
@@ -774,7 +787,18 @@ function memoNodes(m) {
 /** 읽기 팝업: PDF 저장·TXT와 같은 내용 */
 function openReadDialog(m) {
   mount($('#read-text'), memoNodes(m));
+  $('#read-dialog').dataset.id = m.id;
+  const [first] = m.passages;
+  $('#read-passage').href = `#/read/${first.bookId}/${first.chapter}`;
   $('#read-dialog').showModal();
+}
+
+/** 읽기 팝업 버튼: 팝업을 닫고 해당 메모에 동작 적용 */
+function withReadMemo(el, fn) {
+  const dialog = el.closest('dialog');
+  const m = state.memos.find((x) => x.id === dialog.dataset.id);
+  dialog.close();
+  if (m) fn(m);
 }
 
 /* ================= 공유 / 다운로드 ================= */
@@ -867,13 +891,10 @@ const actions = {
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
   'dialog-close': (el) => el.closest('dialog').close(),
-  'memo-edit': (el) => {
-    const m = state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id);
-    openMemoDialog({
-      id: m.id, lang: m.lang, content: m.content, labels: new Set(m.labels),
-      passages: m.passages.map((p) => ({ bookId: p.bookId, chapter: p.chapter, verses: new Set(p.verses) })),
-    });
-  },
+  'memo-edit': (el) => { el.closest('dialog')?.close(); editMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
+  'read-edit': (el) => withReadMemo(el, editMemo),
+  'read-share': (el) => withReadMemo(el, shareMemo),
+  'read-delete': (el) => withReadMemo(el, confirmDelete),
   'auth-toggle': toggleAuth,
   'page-go': (el) => {
     state.page = Number(el.dataset.page);
@@ -883,8 +904,8 @@ const actions = {
   },
   'verse-memos': (el) => openVerseMemos(Number(el.dataset.verse)),
   'memo-read': (el) => openReadDialog(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)),
-  'memo-delete': (el) => confirmDelete(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)),
-  'memo-share': (el) => shareMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)),
+  'memo-delete': (el) => { el.closest('dialog')?.close(); confirmDelete(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
+  'memo-share': (el) => { el.closest('dialog')?.close(); shareMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'dl-json': downloadJson,

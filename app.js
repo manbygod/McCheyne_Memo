@@ -524,7 +524,7 @@ async function route() {
 function renderToday() {
   $('#date-input').value = state.date;
   const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
-  $('#plan-note').textContent = state.plan.source ? `맥체인 읽기표 (출처: ${state.plan.source})` : '※ 읽기표는 맥체인 4트랙 구조를 따른 근사값입니다. (README 참고)';
+  $('#plan-note').textContent = state.plan.source ? '' : '※ 읽기표는 맥체인 4트랙 구조를 따른 근사값입니다. (README 참고)';
   mount($('#reading-list'), state.plan.tracks.map((name, i) => {
     const refs = [].concat(day[i] ?? []).map(normalizeReading); // 트랙 항목: 단일 객체 또는 배열
     return h('li', { class: 'reading-list__item' },

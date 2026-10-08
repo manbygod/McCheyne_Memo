@@ -186,6 +186,97 @@ function memoToShareText(memo, passageRef) {
   return [verses, rule, `✍️ 나의 묵상\n\n${memo.content}`].join('\n\n');
 }
 
+/** 수정일(로컬 날짜)이 iso(YYYY-MM-DD)인 메모, 작성일 최신순 */
+const memosEditedOn = (memos, iso) => memos
+  .filter((m) => toISODate(new Date(m.updatedAt)) === iso)
+  .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+/** 문장을 maxWidth 안에 들어가도록 줄바꿈 (공백 우선, 공백이 없으면 글자 단위). measure(text) → 너비 */
+function wrapText(text, maxWidth, measure) {
+  const lines = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    let lastSpace = -1;
+    for (const ch of para) {
+      if (line && measure(line + ch) > maxWidth) {
+        if (ch !== ' ' && lastSpace > 0) {
+          lines.push(line.slice(0, lastSpace).trimEnd());
+          line = line.slice(lastSpace + 1);
+        } else {
+          lines.push(line);
+          line = '';
+        }
+        lastSpace = -1;
+        if (ch === ' ') continue;
+      }
+      if (ch === ' ') lastSpace = line.length;
+      line += ch;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+/** 카드(줄 목록 {lh}[])들을 페이지에 배치. 한 페이지에 안 들어가는 카드는 줄 단위로 나눠 다음 페이지로 이어 감 */
+function paginateCards(cards, { firstTop, top, bottom, pad = 14, gap = 12 }) {
+  const pages = [[]];
+  let y = firstTop;
+  for (const card of cards) {
+    let rest = card;
+    while (rest.length) {
+      const avail = bottom - y - 2 * pad;
+      let n = 0;
+      let used = 0;
+      while (n < rest.length && used + rest[n].lh <= avail) used += rest[n++].lh;
+      if (n === 0) {
+        if (y !== top) { pages.push([]); y = top; continue; }
+        n = 1;
+        used = rest[0].lh;
+      }
+      pages.at(-1).push({ y, h: used + 2 * pad, items: rest.slice(0, n) });
+      y += used + 2 * pad + gap;
+      rest = rest.slice(n);
+      if (rest.length) { pages.push([]); y = top; }
+    }
+  }
+  return pages;
+}
+
+/** JPEG 이미지 한 장당 한 페이지인 PDF 파일 바이트 생성 (외부 라이브러리 없이). pages: [{jpeg: Uint8Array, width, height}] */
+function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
+  const enc = new TextEncoder();
+  const chunks = [];
+  const offsets = [];
+  let len = 0;
+  const push = (d) => { const b = typeof d === 'string' ? enc.encode(d) : d; chunks.push(b); len += b.length; };
+  const begin = (n) => { offsets[n] = len; push(`${n} 0 obj\n`); };
+  push('%PDF-1.4\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  begin(2);
+  push(`<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] >>\nendobj\n`);
+  pages.forEach((p, i) => {
+    const [pg, ct, im] = [3 + 3 * i, 4 + 3 * i, 5 + 3 * i];
+    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`;
+    begin(pg);
+    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>\nendobj\n`);
+    begin(ct);
+    push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
+    begin(im);
+    push(`<< /Type /XObject /Subtype /Image /Width ${p.width} /Height ${p.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`);
+    push(p.jpeg);
+    push('\nendstream\nendobj\n');
+  });
+  const count = 3 + 3 * pages.length;
+  const xref = len;
+  push(`xref\n0 ${count}\n0000000000 65535 f \n`);
+  for (let n = 1; n < count; n++) push(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
+  push(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  const out = new Uint8Array(len);
+  let pos = 0;
+  for (const c of chunks) { out.set(c, pos); pos += c.length; }
+  return out;
+}
+
 const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
 
 /* ================= 상태 ================= */
@@ -812,6 +903,100 @@ async function shareMemo(m) {
   copyText(text, '공유 기능이 없어 클립보드에 복사했습니다.');
 }
 
+/* ---- 오늘의 말씀묵상 카드 PDF ---- */
+const CARD_PDF = { w: 595, h: 842, scale: 2, margin: 36, pad: 14,
+  sans: '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
+  serif: '"Literata", "Batang", "Noto Serif KR", serif',
+  c: { bg: '#faf8f4', card: '#ffffff', border: '#ddd6c8', text: '#222222', muted: '#666666', primary: '#2f5d50', verse: '#f3efe4' } };
+
+/** 메모 한 건 → 카드 안에 그릴 줄 목록 */
+function memoCardLines(m, ctx) {
+  const { sans, serif, c, w, margin, pad } = CARD_PDF;
+  const inner = w - 2 * margin - 2 * pad;
+  const lines = [];
+  const add = (text, font, color, lh, extra = {}) => {
+    ctx.font = font;
+    for (const t of wrapText(text, inner - (extra.indent ?? 0), (s) => ctx.measureText(s).width)) lines.push({ text: t, font, color, lh, ...extra });
+  };
+  const gap = (lh) => lines.push({ text: '', lh });
+  m.passages.forEach((p, i) => {
+    if (i) gap(8);
+    add(passageRef(m, p), `bold 14px ${sans}`, c.primary, 22);
+    if (p.text) add(p.text, `13px ${serif}, ${sans}`, c.text, 20, { bg: c.verse, indent: 8 });
+  });
+  gap(10);
+  add(m.content, `14px ${sans}`, c.text, 22);
+  if (m.labels.length) { gap(6); add(`# ${m.labels.join('  # ')}`, `12px ${sans}`, c.muted, 18); }
+  return lines;
+}
+
+/** 오늘(선택한 날짜) 수정한 메모를 카드 형태의 PDF(Blob)로 만듦 */
+async function makeMeditationPdf(memos, iso) {
+  const { w, h, scale, margin, pad, sans, c } = CARD_PDF;
+  try { await Promise.all(['13px "Literata"', 'bold 14px "Literata"'].map((f) => document.fonts.load(f))); } catch { /* 폰트 없으면 대체 글꼴 */ }
+  const canvas = h_canvas(w * scale, h * scale);
+  const ctx = canvas.getContext('2d');
+  const cards = memos.map((m) => memoCardLines(m, ctx));
+  const pages = paginateCards(cards, { firstTop: margin + 64, top: margin, bottom: h - margin - 16, pad });
+  const dateLabel = new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' });
+  const out = [];
+  for (let pi = 0; pi < pages.length; pi++) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.fillStyle = c.bg;
+    ctx.fillRect(0, 0, w, h);
+    ctx.textBaseline = 'middle';
+    if (pi === 0) {
+      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; ctx.fillText('오늘의 말씀묵상', margin, margin + 20);
+      ctx.fillStyle = c.muted; ctx.font = `13px ${sans}`; ctx.fillText(dateLabel, margin, margin + 46);
+    }
+    for (const seg of pages[pi]) {
+      ctx.beginPath(); ctx.roundRect(margin, seg.y, w - 2 * margin, seg.h, 10);
+      ctx.fillStyle = c.card; ctx.fill(); ctx.strokeStyle = c.border; ctx.lineWidth = 1; ctx.stroke();
+      let y = seg.y + pad;
+      for (const it of seg.items) {
+        if (it.bg) { ctx.fillStyle = it.bg; ctx.fillRect(margin + pad, y, w - 2 * margin - 2 * pad, it.lh); }
+        if (it.text) { ctx.font = it.font; ctx.fillStyle = it.color; ctx.fillText(it.text, margin + pad + (it.indent ?? 0), y + it.lh / 2); }
+        y += it.lh;
+      }
+    }
+    ctx.fillStyle = c.muted; ctx.font = `11px ${sans}`; ctx.textAlign = 'center';
+    ctx.fillText(`${pi + 1} / ${pages.length}`, w / 2, h - margin / 2); ctx.textAlign = 'start';
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height });
+  }
+  return new Blob([buildPdf(out)], { type: 'application/pdf' });
+}
+
+const h_canvas = (width, height) => Object.assign(document.createElement('canvas'), { width, height });
+
+/** 영어 메모의 말씀을 개역한글 본문으로 바꾼 사본 (원본 메모는 그대로). 본문을 못 불러오면 원래 본문 유지 */
+async function toKorean(m) {
+  if (m.lang !== 'en') return m;
+  const passages = await Promise.all(m.passages.map(async (p) => {
+    const verses = await loadChapter(p.bookId, p.chapter, 'ko');
+    const text = verses ? passageTextOf(verses, p.verses) : '';
+    return { ...p, text: text || p.text };
+  }));
+  return { ...m, lang: 'ko', passages };
+}
+
+/** 오늘의 말씀묵상 공유: PDF를 만들어 공유 시트(문자·카톡·이메일 첨부)로 보내고, 안 되면 파일로 저장 */
+async function shareMeditation(korean = false) {
+  let memos = memosEditedOn(state.memos, state.date);
+  if (!memos.length) { toast('이 날짜에 수정한 메모가 없습니다.'); return; }
+  toast('PDF를 만드는 중입니다…');
+  if (korean) memos = await Promise.all(memos.map(toKorean));
+  const filename = `말씀묵상${korean ? '-한글' : ''}-${state.date}.pdf`;
+  const file = new File([await makeMeditationPdf(memos, state.date)], filename, { type: 'application/pdf' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: '오늘의 말씀묵상' }); return; } catch (e) {
+      if (e.name === 'AbortError') return;
+    }
+  }
+  download(filename, file);
+  toast('공유 기능이 없어 PDF 파일로 저장했습니다. 문자·카톡·이메일에 첨부해 보내세요.');
+}
+
 function download(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = h('a', { href: url, download: filename });
@@ -906,6 +1091,8 @@ const actions = {
   'memo-read': (el) => openReadDialog(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)),
   'memo-delete': (el) => { el.closest('dialog')?.close(); confirmDelete(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
   'memo-share': (el) => { el.closest('dialog')?.close(); shareMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
+  'share-meditation': () => shareMeditation(),
+  'share-meditation-ko': () => shareMeditation(true),
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'dl-json': downloadJson,

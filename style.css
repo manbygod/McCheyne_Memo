@@ -219,6 +219,9 @@ button.chip { cursor: pointer; color: inherit; }
   background: var(--c-surface); color: var(--c-text); padding: 16px;
 }
 .dialog::backdrop { background: rgb(0 0 0 / .45); }
+/* 팝업을 열 때 내용 영역으로 옮겨진 포커스(스크린리더가 내용을 읽도록)는 상자로 표시하지 않음. 버튼·링크의 포커스 링은 유지 */
+.read__text:focus-visible, .dialog__body:focus-visible { outline: none; }
+.btn { font-weight: 400; }
 .dialog__title { margin: 0 0 8px; font-size: 1.15rem; }
 .form { display: grid; gap: 10px; }
 .form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }

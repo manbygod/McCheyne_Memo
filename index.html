@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-08g">
+  <link rel="stylesheet" href="style.css?v=2026-10-08l">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -51,7 +51,7 @@
 
     <!-- 성경 (읽기표와 무관하게 책·장 직접 선택) -->
     <section id="view-bible" class="view" aria-labelledby="bible-title" hidden>
-      <h2 class="view__title" id="bible-title" tabindex="-1">성경 읽기</h2>
+      <h2 class="view__title visually-hidden" id="bible-title" tabindex="-1">성경 읽기</h2>
       <p class="view__note">읽고 싶은 책과 장을 고르세요.</p>
       <form class="bible-picker" id="bible-form">
         <label class="visually-hidden" for="bible-book">책</label>
@@ -85,17 +85,14 @@
 
     <!-- 메모 게시판 -->
     <section id="view-memos" class="view" aria-labelledby="memos-title" hidden>
-      <h2 class="view__title" id="memos-title" tabindex="-1">메모</h2>
+      <h2 class="view__title visually-hidden" id="memos-title" tabindex="-1">메모</h2>
       <form class="search" id="search-form" role="search">
         <label class="field__label" for="search-input">단어 또는 레이블 검색</label>
         <input class="field__control" type="search" id="search-input" placeholder="예: 사랑, 은혜">
       </form>
       <div class="toolbar" role="group" aria-label="메모 도구">
-        <button type="button" class="btn" data-action="dl-txt" aria-label="TXT 다운로드, 현재 목록을 텍스트 파일로">TXT 다운로드</button>
+        <button type="button" class="btn" data-action="dl-txt" aria-label="TXT 저장, 현재 목록을 텍스트 파일로">TXT 저장</button>
         <button type="button" class="btn" data-action="dl-pdf" aria-label="PDF 저장, 현재 목록을 PDF로">PDF 저장</button>
-        <button type="button" class="btn" data-action="dl-json" aria-label="JSON 내보내기, 전체 메모를 JSON 파일로">JSON 내보내기</button>
-        <label class="btn" for="import-file">JSON 가져오기</label>
-        <input class="visually-hidden" type="file" id="import-file" accept="application/json">
         <button type="button" class="btn" data-action="labels-open" aria-label="레이블 관리">레이블 관리</button>
       </div>
       <p class="view__note" id="memos-summary" aria-live="polite"></p>
@@ -140,7 +137,7 @@
   <!-- 메모 읽기 -->
   <dialog class="dialog" id="read-dialog" aria-labelledby="read-dialog-title" aria-describedby="read-text">
     <h2 class="dialog__title visually-hidden" id="read-dialog-title">메모 읽기</h2>
-    <p class="read__text" id="read-text"></p>
+    <p class="read__text" id="read-text" tabindex="-1" autofocus></p>
     <div class="form__actions">
       <a class="btn" id="read-passage" href="#/" data-action="dialog-close">본문</a>
       <button type="button" class="btn" data-action="read-edit">수정</button>
@@ -153,7 +150,7 @@
   <!-- 절에 연결된 메모 -->
   <dialog class="dialog" id="verse-memos-dialog" aria-labelledby="verse-memos-title">
     <h2 class="dialog__title" id="verse-memos-title"></h2>
-    <div id="verse-memos-list"></div>
+    <div class="dialog__body" id="verse-memos-list" tabindex="-1" autofocus></div>
     <div class="form__actions">
       <button type="button" class="btn" data-action="dialog-close">닫기</button>
     </div>
@@ -177,6 +174,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js?v=2026-10-08g"></script>
+  <script src="app.js?v=2026-10-08l"></script>
 </body>
 </html>

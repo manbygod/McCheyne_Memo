@@ -1015,10 +1015,6 @@ function downloadTxt() {
     new Blob(['﻿', memosToText(list, passageRef)], { type: 'text/plain;charset=utf-8' }));
 }
 
-function downloadJson() {
-  download(`memos-${stamp()}.json`, new Blob([JSON.stringify(state.memos, null, 2)], { type: 'application/json' }));
-}
-
 function printPdf() {
   const { list } = visibleMemos();
   if (!list.length) { toast('저장할 메모가 없습니다.'); return; }
@@ -1028,17 +1024,6 @@ function printPdf() {
   document.body.classList.add('is-printing');
   window.addEventListener('afterprint', () => document.body.classList.remove('is-printing'), { once: true });
   window.print(); // 인쇄 대화상자에서 'PDF로 저장' 선택
-}
-
-async function importJson(file) {
-  try {
-    const data = JSON.parse(await file.text());
-    const valid = cleanMemos(data);
-    state.memos = mergeMemos(state.memos, valid);
-    persistMemos();
-    renderMemos();
-    toast(`${valid.length}건을 가져왔습니다.`);
-  } catch { toast('올바른 JSON 파일이 아닙니다.'); }
 }
 
 /* ================= 레이블 관리 ================= */
@@ -1095,7 +1080,6 @@ const actions = {
   'share-meditation-ko': () => shareMeditation(true),
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
-  'dl-json': downloadJson,
   'labels-open': () => { renderLabelsDialog(); $('#labels-dialog').showModal(); },
   'label-delete': (el) => {
     state.labels = state.labels.filter((l) => l !== el.dataset.label);
@@ -1159,9 +1143,6 @@ document.addEventListener('change', (e) => {
   } else if (e.target.id === 'date-input' && e.target.value) {
     state.date = e.target.value;
     renderToday();
-  } else if (e.target.id === 'import-file' && e.target.files[0]) {
-    importJson(e.target.files[0]);
-    e.target.value = '';
   }
 });
 

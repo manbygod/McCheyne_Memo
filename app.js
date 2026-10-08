@@ -532,10 +532,9 @@ function renderToday() {
   $('#date-input').value = state.date;
   const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
   $('#plan-note').textContent = state.plan.source ? '' : '※ 읽기표는 맥체인 4트랙 구조를 따른 근사값입니다. (README 참고)';
-  mount($('#reading-list'), state.plan.tracks.map((name, i) => {
+  mount($('#reading-list'), state.plan.tracks.map((_, i) => {
     const refs = [].concat(day[i] ?? []).map(normalizeReading); // 트랙 항목: 단일 객체 또는 배열
     return h('li', { class: 'reading-list__item' },
-      h('p', { class: 'reading-list__track' }, name),
       refs.length
         ? h('div', { class: 'reading-list__links' }, refs.map((r) =>
           h('a', { class: 'btn', href: `#/read/${r.book}/${r.chapter}` }, formatReading(r, bookById(r.book), state.lang))))

@@ -141,7 +141,6 @@ textarea.field__control { width: 100%; resize: vertical; }
   background: var(--c-surface); border: 1px solid var(--c-border);
   border-radius: var(--radius); padding: 10px 14px;
 }
-.reading-list__track { font-size: .85rem; color: var(--c-muted); margin: 0 0 4px; }
 .reading-list__links { display: flex; flex-wrap: wrap; gap: 8px; }
 .reading-list__empty { color: var(--c-muted); }
 

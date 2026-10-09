@@ -615,6 +615,7 @@ function openVerseMemos(n) {
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-edit', 'aria-label': `${refOf(m)} 메모 수정` }, '수정'),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-share', 'aria-label': `${refOf(m)} 메모 공유` }, '공유'),
       h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'memo-delete', 'aria-label': `${refOf(m)} 메모 삭제` }, '삭제')))));
+  moveDialog($('#verse-memos-dialog'), 0, 0);
   $('#verse-memos-dialog').showModal();
 }
 
@@ -894,6 +895,7 @@ function memoNodes(m) {
 function openReadDialog(m) {
   mount($('#read-text'), memoNodes(m));
   $('#read-dialog').dataset.id = m.id;
+  moveDialog($('#read-dialog'), 0, 0);
   const [first] = m.passages;
   $('#read-passage').href = `#/read/${first.bookId}/${first.chapter}`;
   $('#read-dialog').showModal();

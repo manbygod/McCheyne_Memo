@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-09h">
+  <link rel="stylesheet" href="style.css?v=2026-10-09i">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -142,6 +142,7 @@
 
   <!-- 메모 읽기 -->
   <dialog class="dialog" id="read-dialog" aria-labelledby="read-dialog-title" aria-describedby="read-text">
+    <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>
     <h2 class="dialog__title visually-hidden" id="read-dialog-title">메모 읽기</h2>
     <p class="read__text" id="read-text" tabindex="-1" autofocus></p>
     <div class="form__actions">
@@ -155,6 +156,7 @@
 
   <!-- 절에 연결된 메모 -->
   <dialog class="dialog" id="verse-memos-dialog" aria-labelledby="verse-memos-title">
+    <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>
     <h2 class="dialog__title" id="verse-memos-title"></h2>
     <div class="dialog__body" id="verse-memos-list" tabindex="-1" autofocus></div>
     <div class="form__actions">
@@ -180,6 +182,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js?v=2026-10-09h"></script>
+  <script src="app.js?v=2026-10-09i"></script>
 </body>
 </html>

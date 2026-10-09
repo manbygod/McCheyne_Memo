@@ -218,6 +218,8 @@ button.chip { cursor: pointer; color: inherit; }
 .read__text:focus-visible, .dialog__body:focus-visible { outline: none; }
 .btn { font-weight: 400; }
 .dialog__title { margin: 0 0 8px; font-size: 1.15rem; }
+.dialog__grip { display: flex; justify-content: center; align-items: center; height: 18px; margin: -6px 0 6px; cursor: move; touch-action: none; user-select: none; }
+.dialog__grip::before { content: ''; width: 48px; height: 4px; border-radius: 2px; background: var(--c-border); }
 .dialog__title--drag { cursor: move; touch-action: none; user-select: none; } /* 마우스·터치로 끌어 팝업 위치 이동 */
 .form { display: grid; gap: 10px; }
 .form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }

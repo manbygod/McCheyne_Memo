@@ -218,6 +218,7 @@ button.chip { cursor: pointer; color: inherit; }
 .read__text:focus-visible, .dialog__body:focus-visible { outline: none; }
 .btn { font-weight: 400; }
 .dialog__title { margin: 0 0 8px; font-size: 1.15rem; }
+.dialog__title--drag { cursor: move; touch-action: none; user-select: none; } /* 마우스·터치로 끌어 팝업 위치 이동 */
 .form { display: grid; gap: 10px; }
 .form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
 .form__ref { margin: 0; font-weight: 700; }
@@ -228,6 +229,7 @@ button.chip { cursor: pointer; color: inherit; }
 .memo-passage__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .verse-memo + .verse-memo { border-top: 1px solid var(--c-border); padding-top: 8px; margin-top: 8px; }
 .read__text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-read); line-height: 1.8; }
+.form__manage { margin-top: 8px; }
 .form__labels { border: 1px solid var(--c-border); border-radius: var(--radius); }
 .form__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
 .share { margin: 24px 0; }

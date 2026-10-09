@@ -716,11 +716,20 @@ function openMemoDialog(draft) {
   fillBookSelect(draft.lang, last.bookId);
   syncPicker({ chapter: last.chapter, verse: Math.min(...last.verses) });
   renderDraft();
+  moveDialog($('#memo-dialog'), 0, 0);
   $('#memo-dialog').showModal();
   $('#memo-content').focus();
 }
 
 const draftRef = (d, p) => formatRef(bookById(p.bookId), d.lang, p.chapter, [...p.verses]);
+
+/** 메모 작성 팝업이 열려 있을 때, 화면에서 체크한 레이블을 draft에 반영 (레이블 목록을 다시 그려도 체크가 유지되도록) */
+const memoDialogOpen = () => Boolean(state.draft) && $('#memo-dialog').open;
+function syncDraftLabels(extra) {
+  if (!memoDialogOpen()) return;
+  state.draft.labels = new Set([...document.querySelectorAll('#memo-labels input:checked')].map((i) => i.value));
+  if (extra) state.draft.labels.add(extra);
+}
 
 function renderDraft() {
   const d = state.draft;
@@ -1104,11 +1113,38 @@ const actions = {
     state.labels = state.labels.filter((l) => l !== el.dataset.label);
     persistLabels();
     renderLabelsDialog();
-    if (state.draft) renderDraft();
+    if (memoDialogOpen()) { syncDraftLabels(); state.draft.labels.delete(el.dataset.label); renderDraft(); }
     toast(`레이블 ${el.dataset.label} 삭제`);
     focusFirst('#labels-list button', '#label-input');
   },
 };
+
+/* ---- 팝업 제목을 끌어 위치 이동 (화면 밖으로 나가지 않게 제한) ---- */
+const clamp = (v, min, max) => Math.min(Math.max(v, min), Math.max(min, max));
+
+function moveDialog(dialog, dx, dy) {
+  dialog.dataset.dx = dx;
+  dialog.dataset.dy = dy;
+  dialog.style.translate = dx || dy ? `${dx}px ${dy}px` : '';
+}
+
+let dragging = null;
+document.addEventListener('pointerdown', (e) => {
+  const handle = e.target.closest('[data-drag-handle]');
+  if (!handle || e.button !== 0) return;
+  const dialog = handle.closest('dialog');
+  dragging = { dialog, x: e.clientX, y: e.clientY, ox: Number(dialog.dataset.dx || 0), oy: Number(dialog.dataset.dy || 0), rect: dialog.getBoundingClientRect() };
+  handle.setPointerCapture(e.pointerId);
+});
+document.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const { dialog, x, y, ox, oy, rect } = dragging;
+  const dx = clamp(e.clientX - x, -rect.left, window.innerWidth - rect.right);
+  const dy = clamp(e.clientY - y, -rect.top, window.innerHeight - rect.bottom);
+  moveDialog(dialog, ox + dx, oy + dy);
+});
+document.addEventListener('pointerup', () => { dragging = null; });
+document.addEventListener('pointercancel', () => { dragging = null; });
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
@@ -1127,6 +1163,7 @@ document.addEventListener('submit', (e) => {
       state.labels.push(name);
       persistLabels();
       renderLabelsDialog();
+      if (memoDialogOpen()) { syncDraftLabels(name); renderDraft(); } // 메모 작성 중이면 새 레이블을 바로 선택된 상태로 추가
       toast(`레이블 ${name} 추가`);
     } else if (name) toast('이미 있는 레이블입니다.');
     input.value = '';

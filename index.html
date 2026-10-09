@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-09f">
+  <link rel="stylesheet" href="style.css?v=2026-10-09h">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -109,7 +109,7 @@
   <!-- 메모 작성 -->
   <dialog class="dialog" id="memo-dialog" aria-labelledby="memo-dialog-title">
     <form class="form" id="memo-form" method="dialog">
-      <h2 class="dialog__title" id="memo-dialog-title">메모 작성</h2>
+      <h2 class="dialog__title dialog__title--drag" id="memo-dialog-title" data-drag-handle title="제목을 끌어서 창 위치 이동">메모 작성</h2>
       <p class="visually-hidden" role="status" data-dialog-status></p>
       <p class="form__ref" id="memo-ref"></p>
       <ul class="memo-passages" id="memo-passages" aria-label="선택된 말씀"></ul>
@@ -131,6 +131,7 @@
       <fieldset class="form__labels">
         <legend class="field__label">레이블 (복수 선택)</legend>
         <div class="chips" id="memo-labels"></div>
+        <button type="button" class="btn btn--ghost form__manage" data-action="labels-open">레이블 관리</button>
       </fieldset>
       <div class="form__actions">
         <button type="button" class="btn btn--ghost" data-action="dialog-close">취소</button>
@@ -179,6 +180,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js?v=2026-10-09f"></script>
+  <script src="app.js?v=2026-10-09h"></script>
 </body>
 </html>

@@ -32,7 +32,7 @@
 ## 데이터/저작권
 - 성경 본문은 공유 저작물만 번들: 영어 Berean Standard Bible(BSB), 한국어 개역한글(1961, 대한성서공회 — 본문 변경 금지, 출처 표기). 개역개정·NIV 본문은 저장소에 넣지 않는다.
 - 메모 스키마: `id, content, lang, passages[{bookId, chapter, verses[], text}], labels[], createdAt, updatedAt` (한 메모에 여러 책·장의 말씀 가능, 이전 단일 구절 형식은 불러올 때 자동 변환) (최초 작성 시 `updatedAt == createdAt`)
-- 정렬: 목록은 `createdAt` desc, 검색 결과는 `updatedAt` desc
+- 정렬: 목록·검색 결과 모두 `updatedAt` desc
 
 ## 작업 방식
 - 변경 후 로컬 서버로 실행해 확인 (`python -m http.server`)

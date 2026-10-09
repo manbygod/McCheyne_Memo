@@ -75,7 +75,6 @@ const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-
 /** 레이블 가나다순 (영문은 한글보다 앞) */
 const sortLabels = (labels) => [...labels].sort((a, b) => a.localeCompare(b, 'ko'));
 
-const byCreatedDesc = (a, b) => b.createdAt.localeCompare(a.createdAt);
 const byUpdatedDesc = (a, b) => b.updatedAt.localeCompare(a.updatedAt);
 
 function filterMemos(memos, query, refOf) {
@@ -827,14 +826,14 @@ function toggleSelectionReset() {
 const visibleMemos = () => {
   const searching = state.query.trim() !== '';
   const list = filterMemos(state.memos, state.query, refOf);
-  return { searching, list: [...list].sort(searching ? byUpdatedDesc : byCreatedDesc) };
+  return { searching, list: [...list].sort(byUpdatedDesc) };
 };
 
 function renderMemos() {
   const { searching, list } = visibleMemos();
   $('#memos-summary').textContent = searching
     ? `검색 결과 ${list.length}건 (수정일 최신순)`
-    : `전체 ${list.length}건 (작성일 최신순)`;
+    : `전체 ${list.length}건 (수정일 최신순)`;
   // 페이지 크기는 PAGE_SIZE 건
   const { items, page, pages } = paginate(list, state.page);
   state.page = page;

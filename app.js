@@ -72,6 +72,9 @@ const formatRef = (book, lang, chapter, verses) =>
 
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
+/** 레이블 가나다순 (영문은 한글보다 앞) */
+const sortLabels = (labels) => [...labels].sort((a, b) => a.localeCompare(b, 'ko'));
+
 const byCreatedDesc = (a, b) => b.createdAt.localeCompare(a.createdAt);
 const byUpdatedDesc = (a, b) => b.updatedAt.localeCompare(a.updatedAt);
 
@@ -744,7 +747,7 @@ function renderDraft() {
       nums.length <= 15 && h('ul', { class: 'chips', 'aria-label': '절' }, nums.map((n) =>
         h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'verse-remove', 'data-pi': pi, 'data-verse': n, 'aria-label': `${n}절 제거` }, `${n}절 ×`)))));
   }));
-  mount($('#memo-labels'), state.labels.map((label, i) => {
+  mount($('#memo-labels'), sortLabels(state.labels).map((label, i) => {
     const id = `memo-label-${i}`;
     return h('span', {},
       h('label', { class: 'check', for: id },
@@ -1056,7 +1059,7 @@ function printPdf() {
 
 /* ================= 레이블 관리 ================= */
 function renderLabelsDialog() {
-  mount($('#labels-list'), state.labels.map((l) =>
+  mount($('#labels-list'), sortLabels(state.labels).map((l) =>
     h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'label-delete', 'data-label': l, 'aria-label': `레이블 ${l} 삭제` }, `${l} ×`))));
 }
 

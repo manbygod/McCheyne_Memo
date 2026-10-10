@@ -296,6 +296,7 @@ const state = {
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
   chapter: null, // {bookId, ch, verses:[{n,text}]}
   selected: new Set(),
+  find: '', // 본문 내 검색어
   draft: null, // {id, lang, passages:[{bookId, chapter, verses:Set}], content, labels:Set}
 };
 const $ = (sel) => document.querySelector(sel);
@@ -514,6 +515,7 @@ const setPageTitle = (name) => { document.title = `${name} · 맥체인 성경�
 async function route() {
   const r = parseRoute();
   for (const v of ['today', 'reader', 'memos', 'bible']) $(`#view-${v}`).hidden = v !== r.name;
+  $('#find-form').hidden = r.name !== 'reader'; // 본문 검색창은 장 화면에서만
   if (r.name === 'today') setPageTitle('오늘의 읽기');
   else if (r.name === 'memos') setPageTitle('메모');
   else if (r.name === 'bible') setPageTitle('성경 읽기');
@@ -568,6 +570,9 @@ async function renderReader(bookId, ch) {
   setPageTitle($('#reader-title').textContent);
   $('#passage').lang = state.lang;
   $('#reader-note').textContent = '';
+  state.find = ''; // 장이 바뀌면 검색 초기화
+  $('#find-input').value = '';
+  $('#find-status').textContent = '';
   const home = state.origin === 'bible' ? '#/bible' : '#/'; // 첫 장 이전/마지막 장 다음은 읽던 목록으로
   const prev = ch > 1 ? `#/read/${bookId}/${ch - 1}` : home;
   const next = ch < book.chapters ? `#/read/${bookId}/${ch + 1}` : home;
@@ -590,6 +595,50 @@ async function renderReader(bookId, ch) {
   renderPassage();
 }
 
+/** 순수 함수: 본문을 검색어 기준으로 [{text, hit}] 조각으로 나눔 (대소문자 무시) */
+function splitByQuery(text, query) {
+  if (!query) return [{ text, hit: false }];
+  const parts = [];
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  let i = 0;
+  for (let at = lower.indexOf(q); at !== -1; at = lower.indexOf(q, i)) {
+    if (at > i) parts.push({ text: text.slice(i, at), hit: false });
+    parts.push({ text: text.slice(at, at + q.length), hit: true });
+    i = at + q.length;
+  }
+  if (i < text.length) parts.push({ text: text.slice(i), hit: false });
+  return parts;
+}
+
+/** 순수 함수: 검색어가 들어 있는 절 번호 목록 */
+const findVerses = (verses, query) =>
+  query ? verses.filter((v) => v.text && v.text.toLowerCase().includes(query.toLowerCase())).map((v) => v.n) : [];
+
+const verseTextNodes = (text) =>
+  splitByQuery(text, state.find).map((p) => (p.hit ? h('mark', { class: 'verse__mark' }, p.text) : p.text));
+
+/** 이 장에서 단어 검색: 음영 표시 + 첫 결과 절로 포커스, 없으면 팝업 */
+function searchChapter(query, { live = false } = {}) {
+  if (!state.chapter) return;
+  state.find = query.trim();
+  renderPassage();
+  const status = $('#find-status');
+  if (!state.find) { status.textContent = '검색을 해제했습니다.'; return; }
+  const hits = findVerses(state.chapter.verses, state.find);
+  if (!hits.length) {
+    status.textContent = live ? '찾은 결과가 없습니다.' : ''; // 입력 중에는 팝업이 입력을 끊지 않도록 안내만
+    if (live) return;
+    $('#notice-text').textContent = `이 장에서 "${state.find}"을(를) 찾을 수 없습니다.`;
+    $('#notice-dialog').showModal();
+    return;
+  }
+  status.textContent = `${hits.length}개 절에서 찾았습니다. 첫 결과는 ${hits[0]}절입니다.`;
+  const btn = document.querySelector(`.verse[data-verse="${hits[0]}"] .verse__text`);
+  if (!live) btn?.focus(); // 입력 중에는 포커스를 옮기지 않고 스크롤만
+  btn?.scrollIntoView({ block: 'center' });
+}
+
 /** 본문 렌더. 메모가 연결된 절은 번호를 클릭 가능한 배지로 표시. 빈 절(사본에 없는 절)은 표시하지 않음 */
 function renderPassage() {
   const { bookId, ch, verses } = state.chapter;
@@ -601,7 +650,7 @@ function renderPassage() {
       count
         ? h('button', { type: 'button', class: 'verse__badge', 'data-action': 'verse-memos', 'data-verse': v.n, title: `메모 ${count}개`, 'aria-label': `${v.n}절에 연결된 메모 ${count}개 보기` }, v.n)
         : h('span', { class: 'verse__num' }, v.n), // 스크린리더도 절 번호를 읽을 수 있도록 숨기지 않음
-      h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) }, v.text));
+      h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) }, verseTextNodes(v.text)));
   }));
 }
 
@@ -1132,6 +1181,10 @@ function moveDialog(dialog, dx, dy) {
   dialog.style.translate = dx || dy ? `${dx}px ${dy}px` : '';
 }
 
+/* 입력 방식 추적: 터치/마우스 뒤 프로그램이 옮긴 포커스에는 링을 그리지 않기 위함 (포커스 자체는 유지) */
+document.addEventListener('pointerdown', () => { document.documentElement.dataset.input = 'pointer'; }, true);
+document.addEventListener('keydown', () => { document.documentElement.dataset.input = 'keyboard'; }, true);
+
 let dragging = null;
 document.addEventListener('pointerdown', (e) => {
   const handle = e.target.closest('[data-drag-handle]');
@@ -1172,6 +1225,7 @@ document.addEventListener('submit', (e) => {
     } else if (name) toast('이미 있는 레이블입니다.');
     input.value = '';
   } else if (e.target.id === 'search-form') e.preventDefault();
+  else if (e.target.id === 'find-form') { e.preventDefault(); searchChapter($('#find-input').value); }
   else if (e.target.id === 'bible-form') {
     e.preventDefault();
     const { bookId, ch } = state.bible;
@@ -1180,7 +1234,8 @@ document.addEventListener('submit', (e) => {
 });
 
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
+  if (e.target.id === 'find-input') searchChapter(e.target.value, { live: true });
+  else if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
 });
 
 document.addEventListener('change', (e) => {

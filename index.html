@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-09j">
+  <link rel="stylesheet" href="style.css?v=2026-10-10c">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -17,6 +17,12 @@
       <a class="nav-link" href="#/memos" data-route="memos">메모</a>
       <a class="nav-link" href="#/bible" data-route="bible">성경</a>
     </nav>
+    <!-- 본문(장) 화면에서만 표시 -->
+    <form class="site-header__find" id="find-form" role="search" hidden>
+      <label class="visually-hidden" for="find-input">이 장에서 단어 검색</label>
+      <input class="field__control" type="search" id="find-input" placeholder="이 장에서 단어 검색" autocomplete="off">
+      <button type="submit" class="btn btn--primary">검색</button>
+    </form>
     <div class="site-header__auth" id="auth-box" hidden>
       <span class="site-header__user" id="auth-status"></span>
       <button type="button" class="btn" id="auth-button" data-action="auth-toggle">Google 로그인</button>
@@ -74,6 +80,7 @@
         <h2 class="view__title" id="reader-title" tabindex="-1"></h2>
         <a class="btn btn--ghost" id="reader-next" href="#/">다음 ›</a>
       </div>
+      <p class="visually-hidden" id="find-status" role="status"></p>
       <!-- 넓은 화면(마우스)용 좌우 화살표. 위의 이전/다음 링크와 중복이므로 보조기술에는 숨김 -->
       <a class="reader__arrow reader__arrow--prev" id="reader-arrow-prev" href="#/" aria-hidden="true" tabindex="-1">‹</a>
       <a class="reader__arrow reader__arrow--next" id="reader-arrow-next" href="#/" aria-hidden="true" tabindex="-1">›</a>
@@ -164,6 +171,15 @@
     </div>
   </dialog>
 
+  <!-- 검색 결과 없음 안내 -->
+  <dialog class="dialog" id="notice-dialog" aria-labelledby="notice-dialog-title" role="alertdialog">
+    <h2 class="dialog__title" id="notice-dialog-title">검색 결과 없음</h2>
+    <p id="notice-text"></p>
+    <div class="form__actions">
+      <button type="button" class="btn btn--primary" data-action="dialog-close" autofocus>확인</button>
+    </div>
+  </dialog>
+
   <!-- 레이블 관리 -->
   <dialog class="dialog" id="labels-dialog" aria-labelledby="labels-dialog-title">
     <h2 class="dialog__title" id="labels-dialog-title">레이블 관리</h2>
@@ -182,6 +198,6 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="print-area" id="print-area" aria-hidden="true"></div>
 
-  <script src="app.js?v=2026-10-09j"></script>
+  <script src="app.js?v=2026-10-10c"></script>
 </body>
 </html>

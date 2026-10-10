@@ -28,6 +28,8 @@
   --c-primary-text: #fff;
   --c-select: #fff0a8;
   --c-select-line: #c79a00;
+  --c-mark: #ffd54a;
+  --c-mark-line: #b58900;
   --c-danger: #b3261e;
   --c-focus: #1a5fd0;
   --radius: 8px;
@@ -47,6 +49,8 @@
     --c-primary-text: #0b1512;
     --c-select: #4a4210;
     --c-select-line: #e3bd2b;
+    --c-mark: #7a5f00;
+    --c-mark-line: #e3bd2b;
     --c-danger: #f2918b;
     --c-focus: #8ab4ff;
   }
@@ -93,9 +97,13 @@ a { color: var(--c-primary); }
 }
 .site-header__title { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.3; }
 .site-header__title a { text-decoration: none; color: var(--c-primary); }
-.site-header__nav { display: flex; gap: 8px; margin-right: auto; }
-.site-header__auth { display: flex; align-items: center; gap: 8px; }
+.site-header__nav { display: flex; gap: 8px; }
+.site-header__find { display: flex; gap: 8px; flex: 1 1 220px; max-width: 360px; }
+.site-header__find[hidden] { display: none; }
+.site-header__find .field__control { flex: 1; min-width: 0; }
+.site-header__auth { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .site-header__auth[hidden] { display: none; }
+.site-header__auth[hidden] + .site-header__lang { margin-left: auto; }
 .site-header__user { font-size: .85rem; color: var(--c-muted); max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-header__lang { display: flex; align-items: center; gap: 6px; }
 
@@ -146,6 +154,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 /* reader */
 .reader__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reader__head .view__title { margin: 0; text-align: center; }
+.verse__mark { background: var(--c-mark); color: inherit; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 1px var(--c-mark-line); }
 .reader__arrow { display: none; } /* 넓은 화면에서만 표시 (아래 미디어쿼리) */
 .passage { font-family: var(--font-read); font-size: 1.125rem; line-height: 1.95; margin: 16px 0; }
 .verse { display: flex; align-items: baseline; gap: 8px; border-radius: 4px; padding: 2px 6px; cursor: pointer; }
@@ -155,6 +164,7 @@ textarea.field__control { width: 100%; resize: vertical; }
   font: 700 .75rem/1.6 var(--font); background: var(--c-primary); color: var(--c-primary-text);
 }
 .verse__badge:hover { filter: brightness(1.1); }
+:root[data-input="pointer"] .verse__text:focus-visible { outline: none; } /* 저장·해제 후 자동 포커스의 파란 박스 방지 */
 .verse__text { flex: 1; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .verse:hover { background: color-mix(in srgb, var(--c-select) 40%, transparent); }
 .verse--selected {

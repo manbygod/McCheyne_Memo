@@ -180,7 +180,8 @@ textarea.field__control { width: 100%; resize: vertical; }
 
 /* memos */
 .search { display: grid; gap: 4px; margin-bottom: 12px; }
-.search .field__control { width: 100%; }
+.search__row { display: flex; gap: 8px; }
+.search .field__control { flex: 1; min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
 .board { list-style: none; padding: 0; margin: 12px 0; display: grid; gap: 12px; }
 .memo-card {

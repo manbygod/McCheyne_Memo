@@ -1068,10 +1068,13 @@ async function shareMeditation(korean = false) {
   await deliverFile(await makeMeditationPdf(memos, state.date), filename, '오늘의 말씀묵상');
 }
 
+/** 터치가 주 입력인 기기(폰·태블릿 앱/브라우저) 여부 */
+const isTouchDevice = () => window.matchMedia('(pointer: coarse)').matches;
+
 /** 파일을 공유 시트(파일에 저장·문자·카톡·이메일 첨부)로 보내고, 안 되면 다운로드. 모바일 사파리는 다운로드 시 미리보기 화면으로 가 버리므로 */
 async function deliverFile(blob, filename, title) {
   const file = new File([blob], filename, { type: blob.type.split(';')[0] });
-  if (navigator.canShare?.({ files: [file] })) {
+  if (isTouchDevice() && navigator.canShare?.({ files: [file] })) { // 데스크톱 웹은 공유 시트 없이 바로 저장
     try { await navigator.share({ files: [file], title }); return; } catch (e) {
       if (e.name === 'AbortError') return;
     }
@@ -1141,6 +1144,7 @@ const actions = {
     toast(`${n}절 제거`);
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
+  'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
   'memo-edit': (el) => { el.closest('dialog')?.close(); editMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },

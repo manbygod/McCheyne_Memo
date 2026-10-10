@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-10g">
+  <link rel="stylesheet" href="style.css?v=2026-10-10i">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -100,7 +100,10 @@
       <h2 class="view__title visually-hidden" id="memos-title" tabindex="-1">메모</h2>
       <form class="search" id="search-form" role="search">
         <label class="field__label" for="search-input">단어 또는 레이블 검색</label>
-        <input class="field__control" type="search" id="search-input" placeholder="예: 사랑, 은혜">
+        <div class="search__row">
+          <input class="field__control" type="search" id="search-input" placeholder="예: 사랑, 은혜">
+          <button type="button" class="btn" data-action="search-clear" aria-label="검색어 지우기">지우기</button>
+        </div>
       </form>
       <div class="toolbar" role="group" aria-label="메모 도구">
         <button type="button" class="btn" data-action="dl-txt" aria-label="TXT 저장, 현재 목록을 텍스트 파일로">TXT 저장</button>
@@ -197,6 +200,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-10g"></script>
+  <script src="app.js?v=2026-10-10i"></script>
 </body>
 </html>

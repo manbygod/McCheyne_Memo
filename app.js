@@ -515,7 +515,6 @@ const setPageTitle = (name) => { document.title = `${name} · 맥체인 성경�
 async function route() {
   const r = parseRoute();
   for (const v of ['today', 'reader', 'memos', 'bible']) $(`#view-${v}`).hidden = v !== r.name;
-  $('#find-form').hidden = r.name !== 'reader'; // 본문 검색창은 장 화면에서만
   if (r.name === 'today') setPageTitle('오늘의 읽기');
   else if (r.name === 'memos') setPageTitle('메모');
   else if (r.name === 'bible') setPageTitle('성경 읽기');
@@ -1139,6 +1138,7 @@ const actions = {
     toast(`${n}절 제거`);
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
+  'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
   'memo-edit': (el) => { el.closest('dialog')?.close(); editMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
   'read-edit': (el) => withReadMemo(el, editMemo),
@@ -1234,8 +1234,7 @@ document.addEventListener('submit', (e) => {
 });
 
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'find-input') searchChapter(e.target.value, { live: true });
-  else if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
+  if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
 });
 
 document.addEventListener('change', (e) => {

@@ -97,13 +97,9 @@ a { color: var(--c-primary); }
 }
 .site-header__title { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; line-height: 1.3; }
 .site-header__title a { text-decoration: none; color: var(--c-primary); }
-.site-header__nav { display: flex; gap: 8px; }
-.site-header__find { display: flex; gap: 8px; flex: 1 1 220px; max-width: 360px; }
-.site-header__find[hidden] { display: none; }
-.site-header__find .field__control { flex: 1; min-width: 0; }
-.site-header__auth { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.site-header__nav { display: flex; gap: 8px; margin-right: auto; }
+.site-header__auth { display: flex; align-items: center; gap: 8px; }
 .site-header__auth[hidden] { display: none; }
-.site-header__auth[hidden] + .site-header__lang { margin-left: auto; }
 .site-header__user { font-size: .85rem; color: var(--c-muted); max-width: 12em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-header__lang { display: flex; align-items: center; gap: 6px; }
 
@@ -154,6 +150,8 @@ textarea.field__control { width: 100%; resize: vertical; }
 /* reader */
 .reader__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .reader__head .view__title { margin: 0; text-align: center; }
+.reader__find { display: flex; flex-wrap: wrap; gap: 8px; max-width: 420px; margin: 12px auto 0; }
+.reader__find .field__control { flex: 1 1 140px; min-width: 0; }
 .verse__mark { background: var(--c-mark); color: inherit; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 1px var(--c-mark-line); }
 .reader__arrow { display: none; } /* 넓은 화면에서만 표시 (아래 미디어쿼리) */
 .passage { font-family: var(--font-read); font-size: 1.125rem; line-height: 1.95; margin: 16px 0; }

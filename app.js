@@ -1001,14 +1001,14 @@ function memoCardLines(m, ctx) {
 }
 
 /** 오늘(선택한 날짜) 수정한 메모를 카드 형태의 PDF(Blob)로 만듦 */
-async function makeMeditationPdf(memos, iso) {
+async function makeMeditationPdf(memos, iso, { title = '오늘의 말씀묵상', subtitle } = {}) {
   const { w, h, scale, margin, pad, sans, c } = CARD_PDF;
   try { await Promise.all(['13px "Literata"', 'bold 14px "Literata"'].map((f) => document.fonts.load(f))); } catch { /* 폰트 없으면 대체 글꼴 */ }
   const canvas = h_canvas(w * scale, h * scale);
   const ctx = canvas.getContext('2d');
   const cards = memos.map((m) => memoCardLines(m, ctx));
   const pages = paginateCards(cards, { firstTop: margin + 64, top: margin, bottom: h - margin - 16, pad });
-  const dateLabel = new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' });
+  const dateLabel = subtitle ?? new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' });
   const out = [];
   for (let pi = 0; pi < pages.length; pi++) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -1016,7 +1016,7 @@ async function makeMeditationPdf(memos, iso) {
     ctx.fillRect(0, 0, w, h);
     ctx.textBaseline = 'middle';
     if (pi === 0) {
-      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; ctx.fillText('오늘의 말씀묵상', margin, margin + 20);
+      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; ctx.fillText(title, margin, margin + 20);
       ctx.fillStyle = c.muted; ctx.font = `13px ${sans}`; ctx.fillText(dateLabel, margin, margin + 46);
     }
     for (const seg of pages[pi]) {
@@ -1065,14 +1065,19 @@ async function shareMeditation(korean = false) {
   toast('PDF를 만드는 중입니다…');
   if (korean) memos = await Promise.all(memos.map(toKorean));
   const filename = `말씀묵상${korean ? '-한글' : ''}-${state.date}.pdf`;
-  const file = new File([await makeMeditationPdf(memos, state.date)], filename, { type: 'application/pdf' });
+  await deliverFile(await makeMeditationPdf(memos, state.date), filename, '오늘의 말씀묵상');
+}
+
+/** 파일을 공유 시트(파일에 저장·문자·카톡·이메일 첨부)로 보내고, 안 되면 다운로드. 모바일 사파리는 다운로드 시 미리보기 화면으로 가 버리므로 */
+async function deliverFile(blob, filename, title) {
+  const file = new File([blob], filename, { type: blob.type.split(';')[0] });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: '오늘의 말씀묵상' }); return; } catch (e) {
+    try { await navigator.share({ files: [file], title }); return; } catch (e) {
       if (e.name === 'AbortError') return;
     }
   }
   download(filename, file);
-  toast('공유 기능이 없어 PDF 파일로 저장했습니다. 문자·카톡·이메일에 첨부해 보내세요.');
+  toast('파일로 저장했습니다.');
 }
 
 function download(filename, blob) {
@@ -1086,22 +1091,20 @@ function download(filename, blob) {
 
 const stamp = () => toISODate();
 
-function downloadTxt() {
+async function downloadTxt() {
   const { list, searching } = visibleMemos();
   if (!list.length) { toast('다운로드할 메모가 없습니다.'); return; }
-  download(`mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.txt`,
-    new Blob(['﻿', memosToText(list, passageRef)], { type: 'text/plain;charset=utf-8' }));
+  await deliverFile(new Blob(['﻿', memosToText(list, passageRef)], { type: 'text/plain;charset=utf-8' }),
+    `mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.txt`, '맥체인 성경읽기 메모');
 }
 
-function printPdf() {
-  const { list } = visibleMemos();
+/** 메모 목록(현재 보이는 목록) PDF 저장: window.print()는 모바일에서 차단되므로 PDF 파일을 직접 만든다 */
+async function printPdf() {
+  const { list, searching } = visibleMemos();
   if (!list.length) { toast('저장할 메모가 없습니다.'); return; }
-  mount($('#print-area'),
-    h('h1', {}, '맥체인 성경읽기 메모'),
-    list.map((m) => h('p', { class: 'print-area__memo' }, memoToText(m, passageRef))));
-  document.body.classList.add('is-printing');
-  window.addEventListener('afterprint', () => document.body.classList.remove('is-printing'), { once: true });
-  window.print(); // 인쇄 대화상자에서 'PDF로 저장' 선택
+  toast('PDF를 만드는 중입니다…');
+  const blob = await makeMeditationPdf(list, stamp(), { title: '맥체인 성경읽기 메모', subtitle: `${list.length}개 · ${stamp()}` });
+  await deliverFile(blob, `mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.pdf`, '맥체인 성경읽기 메모');
 }
 
 /* ================= 레이블 관리 ================= */

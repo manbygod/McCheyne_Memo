@@ -254,13 +254,6 @@ button.chip { cursor: pointer; color: inherit; }
 }
 .toast--show { opacity: 1; }
 
-/* print (PDF 저장) */
-.print-area { display: none; }
-@media print {
-  body.is-printing > :not(.print-area) { display: none !important; }
-  body.is-printing .print-area { display: block; color: #000; background: #fff; }
-  .print-area__memo { break-inside: avoid; margin: 0 0 16px; padding-bottom: 8px; border-bottom: 1px solid #999; white-space: pre-wrap; }
-}
 
 @media (min-width: 640px) {
   .page { padding-top: 24px; }

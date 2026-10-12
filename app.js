@@ -1178,6 +1178,14 @@ async function printPdf() {
   await deliverFile(blob, `mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.pdf`, '맥체인 성경읽기 메모');
 }
 
+/** 모든 메모(검색·필터와 무관)를 가져오기와 같은 형식의 JSON 파일로 저장 (PC 전용) */
+function exportMemos() {
+  if (!state.memos.length) { toast('내보낼 메모가 없습니다.'); return; }
+  const blob = new Blob([JSON.stringify(state.memos, null, 2)], { type: 'application/json' });
+  download(`mccheyne-memos-${stamp()}.json`, blob);
+  toast(`메모 ${state.memos.length}건을 파일로 저장했습니다.`);
+}
+
 /** 레이블을 목록과 모든 메모에서 제거 (메모에 남기면 다음 시작 때 목록에 되살아남). 수정된 메모 수를 돌려준다. */
 function removeLabelEverywhere(label) {
   state.labels = state.labels.filter((l) => l !== label);
@@ -1339,6 +1347,7 @@ const actions = {
   'share-meditation-ko': () => shareMeditation(true),
   'share-meditation-txt': () => shareMeditationText(),
   'share-meditation-txt-ko': () => shareMeditationText(true),
+  'memos-export': exportMemos,
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'labels-open': () => { $('#labels-notice').hidden = true; renderLabelsDialog(); $('#labels-dialog').showModal(); },

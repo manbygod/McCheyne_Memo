@@ -196,6 +196,12 @@
       <button type="submit" class="btn btn--primary">추가</button>
     </form>
     <ul class="chips" id="labels-list"></ul>
+    <form class="form__row" id="label-rename-form" hidden>
+      <label class="field__label" for="label-rename-input" id="label-rename-caption">새 이름</label>
+      <input class="field__control" id="label-rename-input" autocomplete="off" required maxlength="20">
+      <button type="submit" class="btn btn--primary">이름 바꾸기</button>
+      <button type="button" class="btn" data-action="label-rename-cancel">취소</button>
+    </form>
     <div class="form__actions">
       <button type="button" class="btn" data-action="dialog-close">닫기</button>
     </div>
@@ -203,6 +209,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-10i"></script>
+  <script src="app.js?v=2026-10-12a"></script>
 </body>
 </html>

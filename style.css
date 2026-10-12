@@ -214,6 +214,7 @@ textarea.field__control { width: 100%; resize: vertical; }
   padding: 2px 10px; border-radius: 999px; border: 1px solid var(--c-border); background: var(--c-bg);
 }
 button.chip { cursor: pointer; color: inherit; }
+.chips__item { display: inline-flex; gap: 2px; }
 .chip--on { background: var(--c-primary); color: var(--c-primary-text); border-color: var(--c-primary); }
 .check { display: inline-flex; align-items: center; gap: 4px; }
 
@@ -233,6 +234,7 @@ button.chip { cursor: pointer; color: inherit; }
 .dialog__title--drag { cursor: move; touch-action: none; user-select: none; } /* 마우스·터치로 끌어 팝업 위치 이동 */
 .form { display: grid; gap: 10px; }
 .form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+.form__row[hidden] { display: none; }
 .form__ref { margin: 0; font-weight: 700; }
 .form__add { border: 1px solid var(--c-border); border-radius: var(--radius); }
 .add-preview { margin: 0; padding: 8px 12px 10px; font-family: var(--font-read); color: var(--c-muted); white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1144,6 +1144,45 @@ function removeLabelEverywhere(label) {
   return changed.length;
 }
 
+/**
+ * 레이블 이름 바꾸기 (순수 함수). 새 이름이 이미 있으면 하나로 합친다.
+ * 바뀐 메모만 새 객체(updatedAt = now)로 돌려준다 → changed
+ */
+function renameLabel(labels, memos, from, to, now) {
+  const merged = labels.includes(to);
+  const nextLabels = merged ? labels.filter((l) => l !== from) : labels.map((l) => (l === from ? to : l));
+  const changed = [];
+  const nextMemos = memos.map((m) => {
+    if (!m.labels.includes(from)) return m;
+    const memo = { ...m, labels: [...new Set(m.labels.map((l) => (l === from ? to : l)))], updatedAt: now };
+    changed.push(memo);
+    return memo;
+  });
+  return { labels: nextLabels, memos: nextMemos, changed, merged };
+}
+
+/** 목록과 모든 메모의 레이블 이름을 바꾸고 저장 (로그인 상태면 바뀐 메모를 클라우드에도 저장) */
+function renameLabelEverywhere(from, to) {
+  const r = renameLabel(state.labels, state.memos, from, to, new Date().toISOString());
+  state.labels = r.labels;
+  state.memos = r.memos;
+  persistLabels();
+  if (r.changed.length) {
+    persistMemos();
+    remoteCall((remote) => Promise.all(r.changed.map((m) => remote.save(m))));
+  }
+  return r;
+}
+
+const findLabelButton = (action, label) => [...document.querySelectorAll(`#labels-list [data-action="${action}"]`)].find((b) => b.dataset.label === label);
+
+function closeRenameForm(focusLabel) {
+  $('#label-rename-form').hidden = true;
+  delete $('#label-rename-form').dataset.from;
+  const target = findLabelButton('label-rename', focusLabel) ?? $('#labels-list button') ?? $('#label-input');
+  target.focus();
+}
+
 /** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화 */
 async function importMemosFile(file) {
   let list;
@@ -1168,7 +1207,9 @@ async function importMemosFile(file) {
 /* ================= 레이블 관리 ================= */
 function renderLabelsDialog() {
   mount($('#labels-list'), sortLabels(state.labels).map((l) =>
-    h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'label-delete', 'data-label': l, 'aria-label': `레이블 ${l} 삭제` }, `${l} ×`))));
+    h('li', { class: 'chips__item' },
+      h('button', { type: 'button', class: 'chip', 'data-action': 'label-rename', 'data-label': l, 'aria-label': `레이블 ${l} 이름 바꾸기` }, l),
+      h('button', { type: 'button', class: 'chip', 'data-action': 'label-delete', 'data-label': l, 'aria-label': `레이블 ${l} 삭제` }, '×'))));
 }
 
 /* ================= 이벤트 (위임) ================= */
@@ -1225,6 +1266,17 @@ const actions = {
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'labels-open': () => { renderLabelsDialog(); $('#labels-dialog').showModal(); },
+  'label-rename': (el) => {
+    const form = $('#label-rename-form');
+    const input = $('#label-rename-input');
+    form.dataset.from = el.dataset.label;
+    $('#label-rename-caption').textContent = `레이블 ${el.dataset.label}의 새 이름`;
+    input.value = el.dataset.label;
+    form.hidden = false;
+    input.focus();
+    input.select();
+  },
+  'label-rename-cancel': () => closeRenameForm($('#label-rename-form').dataset.from),
   'label-delete': (el) => {
     const count = removeLabelEverywhere(el.dataset.label);
     renderLabelsDialog();
@@ -1286,6 +1338,21 @@ document.addEventListener('submit', (e) => {
       toast(`레이블 ${name} 추가`);
     } else if (name) toast('이미 있는 레이블입니다.');
     input.value = '';
+  } else if (e.target.id === 'label-rename-form') {
+    e.preventDefault();
+    const from = e.target.dataset.from;
+    const to = $('#label-rename-input').value.trim();
+    if (!to || to === from) { closeRenameForm(from); return; }
+    const r = renameLabelEverywhere(from, to);
+    renderLabelsDialog();
+    if (memoDialogOpen()) { // 메모 작성 중이면 선택된 레이블도 새 이름으로
+      syncDraftLabels();
+      if (state.draft.labels.delete(from)) state.draft.labels.add(to);
+      renderDraft();
+    }
+    refreshViews();
+    toast(r.merged ? `레이블 ${from}을(를) 이미 있는 ${to}에 합쳤습니다.` : `레이블 ${from} → ${to} 이름을 바꿨습니다.`);
+    closeRenameForm(to);
   } else if (e.target.id === 'search-form') e.preventDefault();
   else if (e.target.id === 'find-form') { e.preventDefault(); searchChapter($('#find-input').value); }
   else if (e.target.id === 'bible-form') {

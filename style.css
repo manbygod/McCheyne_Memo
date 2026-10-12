@@ -137,6 +137,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 .btn--primary { background: var(--c-primary); color: var(--c-primary-text); border-color: var(--c-primary); }
 .btn--ghost { background: transparent; }
 .btn--danger { color: var(--c-danger); }
+@media (pointer: coarse) { .btn--desktop-only { display: none; } } /* 터치 기기(앱)에서는 숨김 */
 
 /* today */
 .day-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

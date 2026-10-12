@@ -73,6 +73,14 @@ const formatRef = (book, lang, chapter, verses) =>
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : `m-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
 /** 레이블 가나다순 (영문은 한글보다 앞) */
+/** 목록에 없지만 메모에 붙어 있는 레이블을 목록에 더한다. 추가할 것이 없으면 같은 배열을 돌려준다. (순수 함수) */
+function labelsWithMemos(labels, memos) {
+  const known = new Set(labels);
+  const extra = [];
+  for (const m of memos) for (const l of m.labels) if (!known.has(l)) { known.add(l); extra.push(l); }
+  return extra.length ? [...labels, ...extra] : labels;
+}
+
 const sortLabels = (labels) => [...labels].sort((a, b) => a.localeCompare(b, 'ko'));
 
 const byUpdatedDesc = (a, b) => b.updatedAt.localeCompare(a.updatedAt);
@@ -391,6 +399,12 @@ async function initFirebase(cfg) {
 const persistMemos = () => writeJSON(KEYS.memos, state.memos);
 const persistTombs = () => writeJSON(KEYS.deleted, state.tombstones);
 const persistLabels = () => writeJSON(KEYS.labels, state.labels);
+
+/** 메모에 쓰인 레이블을 목록에 반영 (다른 기기·원격 메모의 레이블이 이 기기 목록에 없을 때) */
+function syncLabelsFromMemos() {
+  const next = labelsWithMemos(state.labels, state.memos);
+  if (next !== state.labels) { state.labels = next; persistLabels(); }
+}
 const remoteCall = (fn) => state.remote && fn(state.remote).catch(() => toast('클라우드 동기화 실패 (이 기기에는 저장됨)'));
 
 function upsertMemo(memo) {
@@ -419,6 +433,7 @@ async function syncRemote() {
     const r = reconcile(state.memos, state.tombstones, cleanMemos(docs.filter((d) => !d.deletedAt)), remoteTombs);
     state.memos = r.memos;
     state.tombstones = r.tombstones;
+    syncLabelsFromMemos();
     persistMemos();
     persistTombs();
     await Promise.all([
@@ -1110,6 +1125,25 @@ async function printPdf() {
   await deliverFile(blob, `mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.pdf`, '맥체인 성경읽기 메모');
 }
 
+/** 레이블을 목록과 모든 메모에서 제거 (메모에 남기면 다음 시작 때 목록에 되살아남). 수정된 메모 수를 돌려준다. */
+function removeLabelEverywhere(label) {
+  state.labels = state.labels.filter((l) => l !== label);
+  const now = new Date().toISOString();
+  const changed = [];
+  state.memos = state.memos.map((m) => {
+    if (!m.labels.includes(label)) return m;
+    const next = { ...m, labels: m.labels.filter((l) => l !== label), updatedAt: now };
+    changed.push(next);
+    return next;
+  });
+  persistLabels();
+  if (changed.length) {
+    persistMemos();
+    remoteCall((r) => Promise.all(changed.map((m) => r.save(m))));
+  }
+  return changed.length;
+}
+
 /** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화 */
 async function importMemosFile(file) {
   let list;
@@ -1117,17 +1151,17 @@ async function importMemosFile(file) {
   if (!Array.isArray(list)) { toast('메모 목록(JSON 배열) 형식이 아닙니다.'); return; }
   const incoming = cleanMemos(list);
   if (!incoming.length) { toast('가져올 수 있는 메모가 없습니다.'); return; }
-  const before = new Set(state.memos.map((m) => m.id));
+  const before = new Map(state.memos.map((m) => [m.id, m]));
   state.memos = mergeMemos(state.memos, incoming);
+  const after = new Map(state.memos.map((m) => [m.id, m]));
   for (const m of incoming) delete state.tombstones[m.id];
   const added = incoming.filter((m) => !before.has(m.id)).length;
-  const newLabels = [...new Set(incoming.flatMap((m) => m.labels))].filter((l) => !state.labels.includes(l));
-  state.labels = [...state.labels, ...newLabels];
+  const updated = incoming.filter((m) => before.has(m.id) && after.get(m.id) === m).length;
+  syncLabelsFromMemos();
   persistMemos();
   persistTombs();
-  persistLabels();
   refreshViews();
-  toast(`메모 ${added}개를 가져왔습니다. (건너뜀 ${list.length - added}개: 이미 있거나 형식 오류)`);
+  toast(`메모 ${added}개 추가, ${updated}개 갱신 (그대로 둠 ${list.length - added - updated}개: 이미 최신이거나 형식 오류)`);
   syncRemote();
 }
 
@@ -1192,11 +1226,10 @@ const actions = {
   'dl-pdf': printPdf,
   'labels-open': () => { renderLabelsDialog(); $('#labels-dialog').showModal(); },
   'label-delete': (el) => {
-    state.labels = state.labels.filter((l) => l !== el.dataset.label);
-    persistLabels();
+    const count = removeLabelEverywhere(el.dataset.label);
     renderLabelsDialog();
     if (memoDialogOpen()) { syncDraftLabels(); state.draft.labels.delete(el.dataset.label); renderDraft(); }
-    toast(`레이블 ${el.dataset.label} 삭제`);
+    toast(`레이블 ${el.dataset.label} 삭제${count ? ` (메모 ${count}개에서 제거)` : ''}`);
     focusFirst('#labels-list button', '#label-input');
   },
 };
@@ -1327,6 +1360,7 @@ async function init() {
     state.labels = readJSON(KEYS.labels, null) ?? labels;
     state.memos = mergeMemos(cleanMemos(readJSON(KEYS.memos, [])), cleanMemos(seed));
     state.tombstones = readJSON(KEYS.deleted, {});
+    syncLabelsFromMemos();
     persistMemos(); // 레거시 메모를 새 모델로 저장
     try { state.lang = localStorage.getItem(KEYS.lang) || 'ko'; } catch { /* 기본값 */ }
     $('#lang-select').value = state.lang;

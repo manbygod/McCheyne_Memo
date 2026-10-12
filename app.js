@@ -105,10 +105,47 @@ function normalizeMemo(m) {
   return { ...rest, passages };
 }
 
-function isValidMemo(m, hasBook) {
-  if (!m || typeof m.id !== 'string' || typeof m.content !== 'string' || !Array.isArray(m.labels) || !m.createdAt || !m.updatedAt) return false;
+/** 메모로 쓸 수 없는 이유 (문제가 없으면 null). 순수 함수 */
+function memoProblem(m, hasBook) {
+  if (!m || typeof m !== 'object') return '메모 형식이 아님';
+  if (typeof m.id !== 'string') return 'id 없음';
+  if (typeof m.content !== 'string') return '내용(content) 없음';
+  if (!Array.isArray(m.labels)) return '레이블 목록(labels) 없음';
+  if (!m.createdAt || !m.updatedAt) return '작성·수정 일시 없음';
   const ps = Array.isArray(m.passages) ? m.passages : [m];
-  return ps.length > 0 && ps.every((p) => hasBook(p.bookId) && Number.isInteger(p.chapter) && Array.isArray(p.verses));
+  if (!ps.length) return '구절 정보 없음';
+  if (ps.some((p) => !p || !hasBook(p.bookId))) return '알 수 없는 책(bookId)';
+  if (ps.some((p) => !Number.isInteger(p.chapter) || !Array.isArray(p.verses))) return '장·절 정보 오류';
+  return null;
+}
+
+const isValidMemo = (m, hasBook) => memoProblem(m, hasBook) === null;
+
+/**
+ * 가져온 메모 목록을 현재 메모와 비교해 결과를 요약 (순수 함수).
+ * 같은 id 는 updatedAt 이 더 최신인 쪽만 반영하고, 같거나 오래된 것은 '변경 없음'으로 센다.
+ */
+function summarizeImport(raw, existing, hasBook) {
+  const problems = new Map();
+  const valid = [];
+  for (const m of raw) {
+    const why = memoProblem(m, hasBook);
+    if (why) problems.set(why, (problems.get(why) ?? 0) + 1);
+    else valid.push(normalizeMemo(m));
+  }
+  const unique = mergeMemos([], valid); // 파일 안의 같은 id 는 최신 하나만
+  const before = new Map(existing.map((m) => [m.id, m]));
+  const merged = mergeMemos(existing, unique);
+  const after = new Map(merged.map((m) => [m.id, m]));
+  const added = unique.filter((m) => !before.has(m.id)).length;
+  const updated = unique.filter((m) => before.has(m.id) && after.get(m.id) === m).length;
+  return {
+    total: raw.length, added, updated,
+    unchanged: unique.length - added - updated,
+    duplicates: valid.length - unique.length,
+    invalid: [...problems],
+    merged, ids: unique.map((m) => m.id),
+  };
 }
 
 /**
@@ -426,7 +463,7 @@ function deleteMemo(id) {
 
 /** 클라우드와 양방향 병합 후 변경분만 업로드 */
 async function syncRemote() {
-  if (!state.remote) return;
+  if (!state.remote) return null;
   try {
     const docs = await state.remote.list();
     const remoteTombs = Object.fromEntries(docs.filter((d) => d.deletedAt).map((d) => [d.id, d.deletedAt]));
@@ -442,7 +479,8 @@ async function syncRemote() {
     ]);
     refreshViews();
     toast('클라우드와 동기화했습니다.');
-  } catch { toast('클라우드 동기화 실패 (이 기기에는 저장됨)'); }
+    return true;
+  } catch { toast('클라우드 동기화 실패 (이 기기에는 저장됨)'); return false; }
 }
 
 function refreshViews() {
@@ -1183,25 +1221,49 @@ function closeRenameForm(focusLabel) {
   target.focus();
 }
 
-/** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화 */
+/** 가져오기 결과 대화상자: 줄 목록을 보여 준다 (warn 줄은 강조, sub 는 하위 항목) */
+function showImportResult(summary, rows) {
+  $('#import-summary').textContent = summary;
+  mount($('#import-list'), rows.map((r) => h('li', { class: r.warn ? 'result-list__item--warn' : null, id: r.id },
+    r.text,
+    r.sub?.length > 0 && h('ul', { class: 'result-list__sub' }, r.sub.map((t) => h('li', {}, t))))));
+  $('#import-dialog').showModal();
+}
+
+/** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화. 결과는 대화상자로 알린다. */
 async function importMemosFile(file) {
   let list;
-  try { list = JSON.parse(await file.text()); } catch { toast('JSON 파일을 읽을 수 없습니다.'); return; }
-  if (!Array.isArray(list)) { toast('메모 목록(JSON 배열) 형식이 아닙니다.'); return; }
-  const incoming = cleanMemos(list);
-  if (!incoming.length) { toast('가져올 수 있는 메모가 없습니다.'); return; }
-  const before = new Map(state.memos.map((m) => [m.id, m]));
-  state.memos = mergeMemos(state.memos, incoming);
-  const after = new Map(state.memos.map((m) => [m.id, m]));
-  for (const m of incoming) delete state.tombstones[m.id];
-  const added = incoming.filter((m) => !before.has(m.id)).length;
-  const updated = incoming.filter((m) => before.has(m.id) && after.get(m.id) === m).length;
+  try { list = JSON.parse(await file.text()); } catch { showImportResult('가져오지 못했습니다.', [{ text: `${file.name}: JSON 형식이 올바르지 않아 읽을 수 없습니다.`, warn: true }]); return; }
+  if (!Array.isArray(list)) { showImportResult('가져오지 못했습니다.', [{ text: '메모 목록(JSON 배열) 형식이 아닙니다. 이 앱의 메모 형식으로 변환한 파일을 선택하세요.', warn: true }]); return; }
+  const r = summarizeImport(list, state.memos, (id) => !!bookById(id));
+  const invalidCount = r.invalid.reduce((n, [, c]) => n + c, 0);
+  if (!r.ids.length) {
+    showImportResult('가져오지 못했습니다.', [
+      { text: `파일 속 항목 ${r.total}건 중 쓸 수 있는 메모가 없습니다.`, warn: true, sub: r.invalid.map(([why, c]) => `${why}: ${c}건`) }]);
+    return;
+  }
+  const labelsBefore = state.labels.length;
+  state.memos = r.merged;
+  for (const id of r.ids) delete state.tombstones[id];
   syncLabelsFromMemos();
   persistMemos();
   persistTombs();
   refreshViews();
-  toast(`메모 ${added}개 추가, ${updated}개 갱신 (그대로 둠 ${list.length - added - updated}개: 이미 최신이거나 형식 오류)`);
-  syncRemote();
+  const rows = [
+    { text: `새로 추가: ${r.added}건` },
+    { text: `기존 메모를 더 최신 내용으로 갱신: ${r.updated}건` },
+    { text: `변경 없음 (이미 같거나 더 최신): ${r.unchanged}건` },
+  ];
+  if (r.duplicates) rows.push({ text: `파일 안에서 id 가 겹쳐 하나만 반영: ${r.duplicates}건` });
+  if (invalidCount) rows.push({ text: `형식 오류로 건너뜀: ${invalidCount}건`, warn: true, sub: r.invalid.map(([why, c]) => `${why}: ${c}건`) });
+  if (state.labels.length > labelsBefore) rows.push({ text: `레이블 목록에 ${state.labels.length - labelsBefore}개 추가` });
+  rows.push({ text: state.remote ? '클라우드 동기화 중…' : '로그인하지 않아 이 기기에만 저장했습니다.', id: 'import-cloud' });
+  showImportResult(`파일 속 ${r.total}건 중 ${r.added + r.updated}건을 반영했습니다.`, rows);
+  if (state.remote) {
+    const ok = await syncRemote();
+    const cloud = $('#import-cloud');
+    if (cloud) cloud.textContent = ok ? '클라우드 동기화 완료' : '클라우드 동기화 실패 (이 기기에는 저장됨)';
+  }
 }
 
 /* ================= 레이블 관리 ================= */

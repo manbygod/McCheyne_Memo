@@ -186,6 +186,16 @@
     </div>
   </dialog>
 
+  <!-- 메모 가져오기 결과 -->
+  <dialog class="dialog" id="import-dialog" aria-labelledby="import-title" aria-describedby="import-summary" role="alertdialog">
+    <h2 class="dialog__title" id="import-title">메모 가져오기 결과</h2>
+    <p id="import-summary"></p>
+    <ul class="result-list" id="import-list"></ul>
+    <div class="form__actions">
+      <button type="button" class="btn btn--primary" data-action="dialog-close" autofocus>확인</button>
+    </div>
+  </dialog>
+
   <!-- 레이블 관리 -->
   <dialog class="dialog" id="labels-dialog" aria-labelledby="labels-dialog-title">
     <h2 class="dialog__title" id="labels-dialog-title">레이블 관리</h2>
@@ -209,6 +219,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-12a"></script>
+  <script src="app.js?v=2026-10-12b"></script>
 </body>
 </html>

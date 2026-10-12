@@ -1270,8 +1270,7 @@ async function importMemosFile(file) {
 function renderLabelsDialog() {
   mount($('#labels-list'), sortLabels(state.labels).map((l) =>
     h('li', { class: 'chips__item' },
-      h('button', { type: 'button', class: 'chip', 'data-action': 'label-rename', 'data-label': l, 'aria-label': `레이블 ${l} 이름 바꾸기` }, l),
-      h('button', { type: 'button', class: 'chip', 'data-action': 'label-delete', 'data-label': l, 'aria-label': `레이블 ${l} 삭제` }, '×'))));
+      h('button', { type: 'button', class: 'chip', 'data-action': 'label-rename', 'data-label': l, 'aria-label': `레이블 ${l} 이름 바꾸기` }, l))));
 }
 
 /* ================= 이벤트 (위임) ================= */
@@ -1327,7 +1326,7 @@ const actions = {
   'share-meditation-txt-ko': () => shareMeditationText(true),
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
-  'labels-open': () => { renderLabelsDialog(); $('#labels-dialog').showModal(); },
+  'labels-open': () => { $('#labels-notice').hidden = true; renderLabelsDialog(); $('#labels-dialog').showModal(); },
   'label-rename': (el) => {
     const form = $('#label-rename-form');
     const input = $('#label-rename-input');
@@ -1339,12 +1338,33 @@ const actions = {
     input.select();
   },
   'label-rename-cancel': () => closeRenameForm($('#label-rename-form').dataset.from),
-  'label-delete': (el) => {
-    const count = removeLabelEverywhere(el.dataset.label);
+  'label-input-clear': () => {
+    const input = $('#label-input');
+    input.value = '';
+    $('#labels-notice').hidden = true;
+    input.focus();
+  },
+  'label-delete': () => {
+    const input = $('#label-input');
+    const name = input.value.trim();
+    const warn = (msg) => { // 모달 뒤에 가려지는 토스트 대신 대화상자 안에 눈에 보이게 표시 (스크린리더용은 toast 가 상태 영역에 알림)
+      const notice = $('#labels-notice');
+      notice.textContent = msg;
+      notice.hidden = false;
+      toast(msg);
+      input.focus();
+    };
+    if (!name) return warn('삭제할 레이블 이름을 입력하세요.');
+    if (!state.labels.includes(name)) return warn(`"${name}" 레이블은 없습니다.`);
+    $('#labels-notice').hidden = true;
+    const used = state.memos.filter((m) => m.labels.includes(name)).length;
+    if (!window.confirm(`레이블 "${name}"을(를) 삭제할까요?\n\n⚠ 경고: 해당 메모에서 레이블 삭제${used ? ` (메모 ${used}개)` : ''}\n이 작업은 되돌릴 수 없습니다.`)) { input.focus(); return; }
+    const count = removeLabelEverywhere(name);
     renderLabelsDialog();
-    if (memoDialogOpen()) { syncDraftLabels(); state.draft.labels.delete(el.dataset.label); renderDraft(); }
-    toast(`레이블 ${el.dataset.label} 삭제${count ? ` (메모 ${count}개에서 제거)` : ''}`);
-    focusFirst('#labels-list button', '#label-input');
+    if (memoDialogOpen()) { syncDraftLabels(); state.draft.labels.delete(name); renderDraft(); }
+    toast(`레이블 ${name} 삭제${count ? ` (메모 ${count}개에서 제거)` : ''}`);
+    input.value = '';
+    input.focus();
   },
 };
 
@@ -1405,6 +1425,9 @@ document.addEventListener('submit', (e) => {
     const from = e.target.dataset.from;
     const to = $('#label-rename-input').value.trim();
     if (!to || to === from) { closeRenameForm(from); return; }
+    const used = state.memos.filter((m) => m.labels.includes(from)).length;
+    const mergeNote = state.labels.includes(to) ? `\n"${to}"은(는) 이미 있는 레이블이라 합쳐집니다.` : '';
+    if (!window.confirm(`레이블 "${from}"을(를) "${to}"(으)로 바꿀까요?\n\n⚠ 경고: 해당 메모에서 레이블 이름 변경${used ? ` (메모 ${used}개)` : ''}${mergeNote}\n이 작업은 되돌릴 수 없습니다.`)) { $('#label-rename-input').focus(); return; }
     const r = renameLabelEverywhere(from, to);
     renderLabelsDialog();
     if (memoDialogOpen()) { // 메모 작성 중이면 선택된 레이블도 새 이름으로

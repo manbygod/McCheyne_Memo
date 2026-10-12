@@ -201,10 +201,14 @@
     <h2 class="dialog__title" id="labels-dialog-title">레이블 관리</h2>
     <p class="visually-hidden" role="status" data-dialog-status></p>
     <form class="form__row" id="label-form">
-      <label class="field__label" for="label-input">새 레이블</label>
+      <label class="field__label" for="label-input">레이블</label>
       <input class="field__control" id="label-input" autocomplete="off" required maxlength="20">
       <button type="submit" class="btn btn--primary">추가</button>
+      <button type="button" class="btn" data-action="label-delete">삭제</button>
+      <button type="button" class="btn" data-action="label-input-clear">취소</button>
     </form>
+    <p class="dialog__notice" id="labels-notice" hidden></p>
+    <p class="dialog__hint" id="labels-hint">레이블 선택 후 이름 변경</p>
     <ul class="chips" id="labels-list"></ul>
     <form class="form__row" id="label-rename-form" hidden>
       <label class="field__label" for="label-rename-input" id="label-rename-caption">새 이름</label>
@@ -219,6 +223,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-12b"></script>
+  <script src="app.js?v=2026-10-12g"></script>
 </body>
 </html>

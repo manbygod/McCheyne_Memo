@@ -234,6 +234,9 @@ button.chip { cursor: pointer; color: inherit; }
 .dialog__title { margin: 0 0 8px; font-size: 1.15rem; }
 .dialog__grip { display: flex; justify-content: center; align-items: center; height: 18px; margin: -6px 0 6px; cursor: move; touch-action: none; user-select: none; }
 .dialog__grip::before { content: ''; width: 48px; height: 4px; border-radius: 2px; background: var(--c-border); }
+.dialog__notice { margin: 6px 0; color: var(--c-danger, #c0392b); }
+.dialog__notice[hidden] { display: none; }
+.dialog__hint { margin: 8px 0 4px; font-size: 0.9rem; color: var(--c-muted, inherit); }
 .dialog__title--drag { cursor: move; touch-action: none; user-select: none; } /* 마우스·터치로 끌어 팝업 위치 이동 */
 .form { display: grid; gap: 10px; }
 .form__row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }

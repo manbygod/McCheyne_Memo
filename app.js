@@ -715,7 +715,8 @@ function renderPassage() {
     const on = state.selected.has(v.n);
     return h('div', { class: on ? 'verse verse--selected' : 'verse', 'data-verse': v.n },
       count
-        ? h('button', { type: 'button', class: 'verse__badge', 'data-action': 'verse-memos', 'data-verse': v.n, title: `메모 ${count}개`, 'aria-label': `${v.n}절에 연결된 메모 ${count}개 보기` }, v.n)
+        ? h('button', { type: 'button', class: 'verse__badge', 'data-action': 'verse-memos', 'data-verse': v.n, title: `메모 ${count}개`, 'aria-label': `${v.n}절에 연결된 메모 ${count}개 보기` },
+          v.n, count > 1 && h('sup', { class: 'verse__count', 'aria-hidden': 'true' }, count)) // 2개 이상일 때만 표시, aria-label 로 읽히므로 중복 낭독 방지
         : h('span', { class: 'verse__num' }, v.n), // 스크린리더도 절 번호를 읽을 수 있도록 숨기지 않음
       h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) }, verseTextNodes(v.text)));
   }));

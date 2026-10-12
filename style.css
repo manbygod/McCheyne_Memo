@@ -163,6 +163,7 @@ textarea.field__control { width: 100%; resize: vertical; }
   font: 700 .75rem/1.6 var(--font); background: var(--c-primary); color: var(--c-primary-text);
 }
 .verse__badge:hover { filter: brightness(1.1); }
+.verse__count { margin-left: 2px; font-size: .625rem; font-weight: 700; line-height: 0; } /* 메모 개수: 번호 오른쪽 위첨자 */
 :root[data-input="pointer"] .verse__text:focus-visible { outline: none; } /* 저장·해제 후 자동 포커스의 파란 박스 방지 */
 .verse__text { flex: 1; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
 .verse:hover { background: color-mix(in srgb, var(--c-select) 40%, transparent); }

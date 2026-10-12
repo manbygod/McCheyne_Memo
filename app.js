@@ -233,10 +233,25 @@ function memoToShareText(memo, passageRef) {
   return [verses, rule, `✍️ 나의 묵상\n\n${memo.content}`].join('\n\n');
 }
 
-/** 수정일(로컬 날짜)이 iso(YYYY-MM-DD)인 메모, 작성일 최신순 */
-const memosEditedOn = (memos, iso) => memos
-  .filter((m) => toISODate(new Date(m.updatedAt)) === iso)
-  .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+/** 그날 읽기표(트랙별 항목)의 장 목록 → 'bookId:chapter' 키 집합 (chapter2가 있으면 범위 전체) */
+function readingChapterKeys(day) {
+  const keys = new Set();
+  for (const r of [].concat(day).flat().filter(Boolean).map(normalizeReading)) {
+    for (let ch = r.chapter; ch <= (r.chapter2 ?? r.chapter); ch++) keys.add(`${r.book}:${ch}`);
+  }
+  return keys;
+}
+
+/** 그날 읽기표의 장에 말씀이 하나라도 걸린 메모, 수정일 최신순 */
+const memosForReadings = (memos, day) => {
+  const keys = readingChapterKeys(day);
+  return memos
+    .filter((m) => m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+};
+
+/** 선택한 날짜의 읽기표 장들에 기록된 메모 */
+const memosOfDay = (iso) => memosForReadings(state.memos, state.plan.days[planKey(iso, state.plan)] ?? []);
 
 /** 문장을 maxWidth 안에 들어가도록 줄바꿈 (공백 우선, 공백이 없으면 글자 단위). measure(text) → 너비 */
 function wrapText(text, maxWidth, measure) {
@@ -1053,7 +1068,7 @@ function memoCardLines(m, ctx) {
   return lines;
 }
 
-/** 오늘(선택한 날짜) 수정한 메모를 카드 형태의 PDF(Blob)로 만듦 */
+/** 메모들을 카드 형태의 PDF(Blob)로 만듦 */
 async function makeMeditationPdf(memos, iso, { title = '오늘의 말씀묵상', subtitle } = {}) {
   const { w, h, scale, margin, pad, sans, c } = CARD_PDF;
   try { await Promise.all(['13px "Literata"', 'bold 14px "Literata"'].map((f) => document.fonts.load(f))); } catch { /* 폰트 없으면 대체 글꼴 */ }
@@ -1105,16 +1120,16 @@ async function toKorean(m) {
 
 /** 오늘의 말씀묵상 텍스트 공유 */
 async function shareMeditationText(korean = false) {
-  let memos = memosEditedOn(state.memos, state.date);
-  if (!memos.length) { toast('이 날짜에 수정한 메모가 없습니다.'); return; }
+  let memos = memosOfDay(state.date);
+  if (!memos.length) { toast('이 날짜의 읽기 본문에 기록한 메모가 없습니다.'); return; }
   if (korean) memos = await Promise.all(memos.map(toKorean));
   await shareText(meditationToShareText(memos, state.date, passageRef));
 }
 
 /** 오늘의 말씀묵상 공유: PDF를 만들어 공유 시트(문자·카톡·이메일 첨부)로 보내고, 안 되면 파일로 저장 */
 async function shareMeditation(korean = false) {
-  let memos = memosEditedOn(state.memos, state.date);
-  if (!memos.length) { toast('이 날짜에 수정한 메모가 없습니다.'); return; }
+  let memos = memosOfDay(state.date);
+  if (!memos.length) { toast('이 날짜의 읽기 본문에 기록한 메모가 없습니다.'); return; }
   toast('PDF를 만드는 중입니다…');
   if (korean) memos = await Promise.all(memos.map(toKorean));
   const filename = `말씀묵상${korean ? '-한글' : ''}-${state.date}.pdf`;

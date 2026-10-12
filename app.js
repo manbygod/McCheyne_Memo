@@ -1110,6 +1110,27 @@ async function printPdf() {
   await deliverFile(blob, `mccheyne-${searching ? 'search' : 'memos'}-${stamp()}.pdf`, '맥체인 성경읽기 메모');
 }
 
+/** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화 */
+async function importMemosFile(file) {
+  let list;
+  try { list = JSON.parse(await file.text()); } catch { toast('JSON 파일을 읽을 수 없습니다.'); return; }
+  if (!Array.isArray(list)) { toast('메모 목록(JSON 배열) 형식이 아닙니다.'); return; }
+  const incoming = cleanMemos(list);
+  if (!incoming.length) { toast('가져올 수 있는 메모가 없습니다.'); return; }
+  const before = new Set(state.memos.map((m) => m.id));
+  state.memos = mergeMemos(state.memos, incoming);
+  for (const m of incoming) delete state.tombstones[m.id];
+  const added = incoming.filter((m) => !before.has(m.id)).length;
+  const newLabels = [...new Set(incoming.flatMap((m) => m.labels))].filter((l) => !state.labels.includes(l));
+  state.labels = [...state.labels, ...newLabels];
+  persistMemos();
+  persistTombs();
+  persistLabels();
+  refreshViews();
+  toast(`메모 ${added}개를 가져왔습니다. (건너뜀 ${list.length - added}개: 이미 있거나 형식 오류)`);
+  syncRemote();
+}
+
 /* ================= 레이블 관리 ================= */
 function renderLabelsDialog() {
   mount($('#labels-list'), sortLabels(state.labels).map((l) =>
@@ -1144,6 +1165,7 @@ const actions = {
     toast(`${n}절 제거`);
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
+  'memos-import': () => $('#import-file').click(),
   'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
@@ -1245,7 +1267,11 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
-  if (e.target.id === 'lang-select') {
+  if (e.target.id === 'import-file') {
+    const [file] = e.target.files;
+    e.target.value = '';
+    if (file) importMemosFile(file);
+  } else if (e.target.id === 'lang-select') {
     state.lang = e.target.value;
     try { localStorage.setItem(KEYS.lang, state.lang); } catch { /* 무시 */ }
     document.documentElement.lang = 'ko';

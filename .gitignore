@@ -7,3 +7,6 @@ data/official_plan.json
 
 # 개인 메모 백업
 backup/
+
+# 다른 앱에서 가져온 개인 메모 원본 (공개 배포 금지)
+data/Kim notes.json

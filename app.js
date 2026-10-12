@@ -123,9 +123,11 @@ const isValidMemo = (m, hasBook) => memoProblem(m, hasBook) === null;
 
 /**
  * 가져온 메모 목록을 현재 메모와 비교해 결과를 요약 (순수 함수).
- * 같은 id 는 updatedAt 이 더 최신인 쪽만 반영하고, 같거나 오래된 것은 '변경 없음'으로 센다.
+ * 일반: 같은 id 는 updatedAt 이 더 최신인 쪽만 반영하고, 같거나 오래된 것은 '변경 없음'으로 센다.
+ * mergeLabels: 앱에 이미 있는 메모에 파일에만 있는 레이블을 더하기만 한다 (내용·다른 레이블은 그대로, updatedAt 만 1ms 늦춤).
+ *   앱에 없는 메모는 만들지 않고 notFound 로 센다.
  */
-function summarizeImport(raw, existing, hasBook) {
+function summarizeImport(raw, existing, hasBook, { mergeLabels = false } = {}) {
   const problems = new Map();
   const valid = [];
   for (const m of raw) {
@@ -135,15 +137,32 @@ function summarizeImport(raw, existing, hasBook) {
   }
   const unique = mergeMemos([], valid); // 파일 안의 같은 id 는 최신 하나만
   const before = new Map(existing.map((m) => [m.id, m]));
+  const common = { total: raw.length, valid: unique.length, duplicates: valid.length - unique.length, invalid: [...problems] };
+
+  if (mergeLabels) {
+    const adds = new Map();
+    let notFound = 0;
+    for (const m of unique) {
+      const cur = before.get(m.id);
+      if (!cur) { notFound++; continue; }
+      const missing = m.labels.filter((l) => !cur.labels.includes(l));
+      if (missing.length) adds.set(m.id, { ...cur, labels: [...cur.labels, ...missing], updatedAt: new Date(new Date(cur.updatedAt).getTime() + 1).toISOString() });
+    }
+    return {
+      ...common, added: 0, updated: 0, labelsMerged: adds.size, notFound,
+      unchanged: unique.length - notFound - adds.size,
+      merged: adds.size ? existing.map((m) => adds.get(m.id) ?? m) : existing,
+      ids: [...adds.keys()],
+    };
+  }
+
   const merged = mergeMemos(existing, unique);
   const after = new Map(merged.map((m) => [m.id, m]));
   const added = unique.filter((m) => !before.has(m.id)).length;
   const updated = unique.filter((m) => before.has(m.id) && after.get(m.id) === m).length;
   return {
-    total: raw.length, added, updated,
+    ...common, added, updated, labelsMerged: 0, notFound: 0,
     unchanged: unique.length - added - updated,
-    duplicates: valid.length - unique.length,
-    invalid: [...problems],
     merged, ids: unique.map((m) => m.id),
   };
 }
@@ -1231,13 +1250,13 @@ function showImportResult(summary, rows) {
 }
 
 /** 메모 JSON 파일 가져오기: 스키마 검사 후 id 기준 병합(같은 id 는 최신 수정본), 새 레이블 추가, 로그인 상태면 클라우드 동기화. 결과는 대화상자로 알린다. */
-async function importMemosFile(file) {
+async function importMemosFile(file, { mergeLabels = false } = {}) {
   let list;
   try { list = JSON.parse(await file.text()); } catch { showImportResult('가져오지 못했습니다.', [{ text: `${file.name}: JSON 형식이 올바르지 않아 읽을 수 없습니다.`, warn: true }]); return; }
   if (!Array.isArray(list)) { showImportResult('가져오지 못했습니다.', [{ text: '메모 목록(JSON 배열) 형식이 아닙니다. 이 앱의 메모 형식으로 변환한 파일을 선택하세요.', warn: true }]); return; }
-  const r = summarizeImport(list, state.memos, (id) => !!bookById(id));
+  const r = summarizeImport(list, state.memos, (id) => !!bookById(id), { mergeLabels });
   const invalidCount = r.invalid.reduce((n, [, c]) => n + c, 0);
-  if (!r.ids.length) {
+  if (!r.valid) {
     showImportResult('가져오지 못했습니다.', [
       { text: `파일 속 항목 ${r.total}건 중 쓸 수 있는 메모가 없습니다.`, warn: true, sub: r.invalid.map(([why, c]) => `${why}: ${c}건`) }]);
     return;
@@ -1249,16 +1268,21 @@ async function importMemosFile(file) {
   persistMemos();
   persistTombs();
   refreshViews();
-  const rows = [
-    { text: `새로 추가: ${r.added}건` },
-    { text: `기존 메모를 더 최신 내용으로 갱신: ${r.updated}건` },
-    { text: `변경 없음 (이미 같거나 더 최신): ${r.unchanged}건` },
-  ];
+  const rows = mergeLabels
+    ? [{ text: `레이블이 추가된 기존 메모: ${r.labelsMerged}건` }, { text: `이미 같은 레이블이 있어 변경 없음: ${r.unchanged}건` }]
+    : [
+      { text: `새로 추가: ${r.added}건` },
+      { text: `기존 메모를 더 최신 내용으로 갱신: ${r.updated}건` },
+      { text: `변경 없음 (이미 같거나 더 최신): ${r.unchanged}건` },
+    ];
+  if (r.notFound) rows.push({ text: `앱에 없는 메모라 건너뜀 (레이블만 합치기에서는 메모를 새로 만들지 않음): ${r.notFound}건` });
   if (r.duplicates) rows.push({ text: `파일 안에서 id 가 겹쳐 하나만 반영: ${r.duplicates}건` });
   if (invalidCount) rows.push({ text: `형식 오류로 건너뜀: ${invalidCount}건`, warn: true, sub: r.invalid.map(([why, c]) => `${why}: ${c}건`) });
   if (state.labels.length > labelsBefore) rows.push({ text: `레이블 목록에 ${state.labels.length - labelsBefore}개 추가` });
   rows.push({ text: state.remote ? '클라우드 동기화 중…' : '로그인하지 않아 이 기기에만 저장했습니다.', id: 'import-cloud' });
-  showImportResult(`파일 속 ${r.total}건 중 ${r.added + r.updated}건을 반영했습니다.`, rows);
+  showImportResult(mergeLabels
+    ? `파일 속 ${r.total}건 중 ${r.labelsMerged}건의 메모에 레이블을 더했습니다.`
+    : `파일 속 ${r.total}건 중 ${r.added + r.updated}건을 반영했습니다.`, rows);
   if (state.remote) {
     const ok = await syncRemote();
     const cloud = $('#import-cloud');
@@ -1275,6 +1299,8 @@ function renderLabelsDialog() {
 }
 
 /* ================= 이벤트 (위임) ================= */
+let importMergeLabels = false; // 가져오기 버튼 종류: 일반 / 레이블 합쳐 가져오기
+
 const actions = {
   'day-prev': () => { state.date = shiftISODate(state.date, -1); renderToday(); },
   'day-next': () => { state.date = shiftISODate(state.date, 1); renderToday(); },
@@ -1302,7 +1328,8 @@ const actions = {
     toast(`${n}절 제거`);
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
-  'memos-import': () => $('#import-file').click(),
+  'memos-import': () => { importMergeLabels = false; $('#import-file').click(); },
+  'memos-import-labels': () => { importMergeLabels = true; $('#import-file').click(); },
   'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
@@ -1432,7 +1459,7 @@ document.addEventListener('change', (e) => {
   if (e.target.id === 'import-file') {
     const [file] = e.target.files;
     e.target.value = '';
-    if (file) importMemosFile(file);
+    if (file) importMemosFile(file, { mergeLabels: importMergeLabels });
   } else if (e.target.id === 'lang-select') {
     state.lang = e.target.value;
     try { localStorage.setItem(KEYS.lang, state.lang); } catch { /* 무시 */ }

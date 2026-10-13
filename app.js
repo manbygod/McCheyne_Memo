@@ -317,7 +317,21 @@ function paginateCards(cards, { firstTop, top, bottom, pad = 14, gap = 12 }) {
   return pages;
 }
 
-/** JPEG 이미지 한 장당 한 페이지인 PDF 파일 바이트 생성 (외부 라이브러리 없이). pages: [{jpeg: Uint8Array, width, height}] */
+const utf16Hex = (t) => Array.from({ length: t.length }, (_, i) => t.charCodeAt(i).toString(16).padStart(4, '0')).join('').toUpperCase();
+
+/** 투명 텍스트 층(렌더 모드 3) 연산: 화면에는 그리지 않지만 선택·검색·스크린리더 낭독에 쓰인다. runs: [{text, x, y, w, lh}] (페이지 좌표계 css px, 위쪽 기준) */
+function textLayerOps(runs, sx, sy, pageH) {
+  return runs.map((r) => ({ ...r, text: r.text.replace(/[\u{10000}-\u{10FFFF}]/gu, '') })) // 이모지 등 BMP 밖 글자는 2바이트 글자코드로 표현할 수 없어 뺌
+    .filter((r) => r.text.trim()).map((r) => {
+    const size = Math.max(4, r.lh * 0.6 * sy);
+    const tz = r.w > 0 ? (100 * r.w * sx) / (r.text.length * size) : 100; // 글꼴 폭을 가정(1em)하고 실제 줄 폭에 맞춰 가로 배율 조정
+    const y = pageH - (r.y + r.lh / 2) * sy - size * 0.3;
+    return `BT 3 Tr /F1 ${size.toFixed(2)} Tf ${tz.toFixed(1)} Tz 1 0 0 1 ${(r.x * sx).toFixed(2)} ${y.toFixed(2)} Tm <${utf16Hex(r.text)}> Tj ET`;
+  }).join('\n');
+}
+
+/** 페이지 이미지 위에 투명 텍스트 층을 얹은 PDF 파일 바이트 생성 (외부 라이브러리 없이).
+ *  pages: [{jpeg: Uint8Array, width, height, cssW, cssH, runs}]. 글꼴은 심지 않고 ToUnicode(글자코드=유니코드)만 둔다 — 글자가 보이지 않으므로 글꼴이 필요 없고, 텍스트 추출용 매핑만 있으면 된다. */
 function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
   const enc = new TextEncoder();
   const chunks = [];
@@ -325,15 +339,17 @@ function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
   let len = 0;
   const push = (d) => { const b = typeof d === 'string' ? enc.encode(d) : d; chunks.push(b); len += b.length; };
   const begin = (n) => { offsets[n] = len; push(`${n} 0 obj\n`); };
+  const font = 3 + 3 * pages.length; // 글꼴 객체 4개: Type0, CIDFont, FontDescriptor, ToUnicode
   push('%PDF-1.4\n');
-  begin(1); push('<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R /Lang (ko-KR) >>\nendobj\n');
   begin(2);
   push(`<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] >>\nendobj\n`);
   pages.forEach((p, i) => {
     const [pg, ct, im] = [3 + 3 * i, 4 + 3 * i, 5 + 3 * i];
-    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q`;
+    const text = p.runs?.length ? `\n${textLayerOps(p.runs, pageW / p.cssW, pageH / p.cssH, pageH)}` : '';
+    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q${text}`;
     begin(pg);
-    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${im} 0 R >> >> /Contents ${ct} 0 R >>\nendobj\n`);
+    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${im} 0 R >> /Font << /F1 ${font} 0 R >> >> /Contents ${ct} 0 R >>\nendobj\n`);
     begin(ct);
     push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
     begin(im);
@@ -341,7 +357,17 @@ function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
     push(p.jpeg);
     push('\nendstream\nendobj\n');
   });
-  const count = 3 + 3 * pages.length;
+  const cmap = '/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def /CMapType 2 def\n'
+    + '1 begincodespacerange <0000> <FFFF> endcodespacerange\n1 beginbfrange <0000> <FFFF> <0000> endbfrange\nendcmap CMapName currentdict /CMap defineresource pop end end';
+  begin(font);
+  push(`<< /Type /Font /Subtype /Type0 /BaseFont /Invisible /Encoding /Identity-H /DescendantFonts [${font + 1} 0 R] /ToUnicode ${font + 3} 0 R >>\nendobj\n`);
+  begin(font + 1);
+  push(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Invisible /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${font + 2} 0 R /DW 1000 /CIDToGIDMap /Identity >>\nendobj\n`);
+  begin(font + 2);
+  push('<< /Type /FontDescriptor /FontName /Invisible /Flags 4 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>\nendobj\n');
+  begin(font + 3);
+  push(`<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream\nendobj\n`);
+  const count = font + 4;
   const xref = len;
   push(`xref\n0 ${count}\n0000000000 65535 f \n`);
   for (let n = 1; n < count; n++) push(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
@@ -1105,7 +1131,7 @@ async function shareText(text) {
 }
 
 /* ---- 오늘의 말씀묵상 카드 PDF ---- */
-const CARD_PDF = { w: 595, h: 842, scale: 2, margin: 36, pad: 14,
+const CARD_PDF = { w: 595, h: 842, scale: 3, margin: 36, pad: 14,
   sans: '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
   serif: '"Literata", "Batang", "Noto Serif KR", serif',
   c: { bg: '#faf8f4', card: '#ffffff', border: '#ddd6c8', text: '#222222', muted: '#666666', primary: '#2f5d50', verse: '#f3efe4' } };
@@ -1145,9 +1171,11 @@ async function makeMeditationPdf(memos, iso, { title = '오늘의 말씀묵상',
     ctx.fillStyle = c.bg;
     ctx.fillRect(0, 0, w, h);
     ctx.textBaseline = 'middle';
+    const runs = []; // 투명 텍스트 층용 (읽는 순서대로)
+    const draw = (text, x, y, lh) => { ctx.fillText(text, x, y); runs.push({ text, x, y: y - lh / 2, w: ctx.measureText(text).width, lh }); };
     if (pi === 0) {
-      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; ctx.fillText(title, margin, margin + 20);
-      ctx.fillStyle = c.muted; ctx.font = `13px ${sans}`; ctx.fillText(dateLabel, margin, margin + 46);
+      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; draw(title, margin, margin + 20, 30);
+      ctx.fillStyle = c.muted; ctx.font = `13px ${sans}`; draw(dateLabel, margin, margin + 46, 20);
     }
     for (const seg of pages[pi]) {
       ctx.beginPath(); ctx.roundRect(margin, seg.y, w - 2 * margin, seg.h, 10);
@@ -1155,14 +1183,14 @@ async function makeMeditationPdf(memos, iso, { title = '오늘의 말씀묵상',
       let y = seg.y + pad;
       for (const it of seg.items) {
         if (it.bg) { ctx.fillStyle = it.bg; ctx.fillRect(margin + pad, y, w - 2 * margin - 2 * pad, it.lh); }
-        if (it.text) { ctx.font = it.font; ctx.fillStyle = it.color; ctx.fillText(it.text, margin + pad + (it.indent ?? 0), y + it.lh / 2); }
+        if (it.text) { ctx.font = it.font; ctx.fillStyle = it.color; draw(it.text, margin + pad + (it.indent ?? 0), y + it.lh / 2, it.lh); }
         y += it.lh;
       }
     }
     ctx.fillStyle = c.muted; ctx.font = `11px ${sans}`; ctx.textAlign = 'center';
     ctx.fillText(`${pi + 1} / ${pages.length}`, w / 2, h - margin / 2); ctx.textAlign = 'start';
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
-    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height });
+    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height, cssW: w, cssH: h, runs });
   }
   return new Blob([buildPdf(out)], { type: 'application/pdf' });
 }

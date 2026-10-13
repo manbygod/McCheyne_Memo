@@ -2,10 +2,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // 로그인한 사용자는 자기 메모(users/{본인 uid}/memos)만 읽고 쓸 수 있다.
+    // 쓰기는 메모 한 건 또는 삭제 기록({id, deletedAt}) 모양이어야 하며 크기 상한(app.js 의 MEMO_LIMITS 와 같은 값)을 지켜야 한다.
     match /users/{uid}/memos/{id} {
+      function isMemo(d) {
+        return d.id == id
+          && d.content is string && d.content.size() <= 20000
+          && d.labels is list && d.labels.size() <= 50
+          && d.passages is list && d.passages.size() >= 1 && d.passages.size() <= 50
+          && d.createdAt is string && d.createdAt.size() <= 40
+          && d.updatedAt is string && d.updatedAt.size() <= 40
+          && (!('lang' in d) || d.lang in ['ko', 'en']);
+      }
+      function isTombstone(d) {
+        return d.id == id
+          && d.deletedAt is string && d.deletedAt.size() <= 40
+          && d.keys().hasOnly(['id', 'deletedAt']);
+      }
+
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create, update: if request.auth != null && request.auth.uid == uid
-                            && request.resource.data.id == id;
+                            && id.size() <= 128
+                            && (isMemo(request.resource.data) || isTombstone(request.resource.data));
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
   }

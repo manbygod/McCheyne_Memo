@@ -105,17 +105,30 @@ function normalizeMemo(m) {
   return { ...rest, passages };
 }
 
+/** 외부(가져오기·클라우드) 메모의 크기 상한. scripts/firestore.rules 와 맞춘다. */
+const MEMO_LIMITS = { id: 128, text: 20000, labels: 50, label: 100, passages: 50, verses: 200, date: 40 };
+
+const isIsoDate = (s) => typeof s === 'string' && s.length <= MEMO_LIMITS.date && !Number.isNaN(Date.parse(s));
+const isPassage = (p) => Number.isInteger(p.chapter) && p.chapter >= 1 && Array.isArray(p.verses)
+  && p.verses.length <= MEMO_LIMITS.verses && p.verses.every((n) => Number.isInteger(n) && n >= 1);
+
 /** 메모로 쓸 수 없는 이유 (문제가 없으면 null). 순수 함수 */
 function memoProblem(m, hasBook) {
-  if (!m || typeof m !== 'object') return '메모 형식이 아님';
-  if (typeof m.id !== 'string') return 'id 없음';
+  if (!m || typeof m !== 'object' || Array.isArray(m)) return '메모 형식이 아님';
+  if (typeof m.id !== 'string' || !m.id) return 'id 없음';
+  if (m.id.length > MEMO_LIMITS.id || m.id.includes('/')) return 'id 형식 오류';
   if (typeof m.content !== 'string') return '내용(content) 없음';
+  if (m.content.length > MEMO_LIMITS.text) return '내용이 너무 김';
   if (!Array.isArray(m.labels)) return '레이블 목록(labels) 없음';
-  if (!m.createdAt || !m.updatedAt) return '작성·수정 일시 없음';
+  if (m.labels.length > MEMO_LIMITS.labels || m.labels.some((l) => typeof l !== 'string' || l.length > MEMO_LIMITS.label)) return '레이블 형식 오류';
+  if (!isIsoDate(m.createdAt) || !isIsoDate(m.updatedAt)) return '작성·수정 일시 없음 또는 형식 오류';
+  if (m.lang !== undefined && m.lang !== 'ko' && m.lang !== 'en') return '언어(lang) 값 오류';
   const ps = Array.isArray(m.passages) ? m.passages : [m];
   if (!ps.length) return '구절 정보 없음';
-  if (ps.some((p) => !p || !hasBook(p.bookId))) return '알 수 없는 책(bookId)';
-  if (ps.some((p) => !Number.isInteger(p.chapter) || !Array.isArray(p.verses))) return '장·절 정보 오류';
+  if (ps.length > MEMO_LIMITS.passages) return '구절이 너무 많음';
+  if (ps.some((p) => !p || typeof p !== 'object' || !hasBook(p.bookId))) return '알 수 없는 책(bookId)';
+  if (ps.some((p) => !isPassage(p))) return '장·절 정보 오류';
+  if (ps.some((p) => [p.text, p.passageText].some((t) => t !== undefined && (typeof t !== 'string' || t.length > MEMO_LIMITS.text)))) return '구절 본문 형식 오류';
   return null;
 }
 

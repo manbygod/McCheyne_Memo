@@ -193,7 +193,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 .memo-card { position: relative; cursor: pointer; }
 .memo-card:hover { border-color: var(--c-primary); }
 .memo-card:has(.memo-card__open:focus-visible) { outline: 3px solid var(--c-focus); outline-offset: 2px; }
-.memo-card__ref { margin: 0; font-weight: 700; }
+.memo-card__ref { margin: 0; font-size: inherit; font-weight: 700; } /* h3: 제목 이동 키용, 모양은 그대로 */
 .memo-card__open {
   font: inherit; color: inherit; background: none; border: 0; padding: 0;
   text-align: left; cursor: pointer;

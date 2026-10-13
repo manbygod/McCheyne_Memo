@@ -400,10 +400,13 @@ function focusFirst(...selectors) {
 }
 
 let toastTimer;
+let toastFillTimer;
 let dialogStatusTimer;
 function toast(msg) {
   const t = $('#toast');
-  t.textContent = msg;
+  t.textContent = ''; // 라이브 영역을 비웠다가 채워야 같은 문구가 연속돼도 스크린리더가 다시 읽는다
+  clearTimeout(toastFillTimer);
+  toastFillTimer = setTimeout(() => { t.textContent = msg; }, 50);
   t.classList.add('toast--show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => t.classList.remove('toast--show'), 2200);
@@ -612,6 +615,11 @@ async function route() {
 }
 
 /* ================= 오늘의 읽기 ================= */
+/** 날짜 이동 뒤 바뀐 날짜를 스크린리더에 알림 (포커스는 이동 버튼에 남아 있어 목록만으로는 날짜를 알 수 없음) */
+function announceDay() {
+  $('#day-status').textContent = `${new Date(`${state.date}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' })} 읽기`;
+}
+
 function renderToday() {
   $('#date-input').value = state.date;
   const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
@@ -621,7 +629,7 @@ function renderToday() {
     return h('li', { class: 'reading-list__item' },
       refs.length
         ? h('div', { class: 'reading-list__links' }, refs.map((r) =>
-          h('a', { class: 'btn', href: `#/read/${r.book}/${r.chapter}` }, formatReading(r, bookById(r.book), state.lang))))
+          h('a', { class: 'btn', lang: state.lang, href: `#/read/${r.book}/${r.chapter}` }, formatReading(r, bookById(r.book), state.lang))))
         : h('span', { class: 'reading-list__empty' }, '여유일 (밀린 본문 읽기)'));
   }));
 }
@@ -645,8 +653,11 @@ async function renderReader(bookId, ch) {
   const book = bookById(bookId);
   state.bible = { bookId, ch }; // 성경 메뉴로 돌아오면 마지막으로 읽은 곳이 선택되어 있도록
   state.selected.clear();
+  lastClicked = null; // 다른 장의 절에서 Shift 범위 선택이 이어지지 않도록
+  rangeStart = null;
+  $('#selection-status').textContent = ''; // 장을 옮길 때는 "선택 해제됨"을 읽지 않음
   updateSelectionBar();
-  $('#reader-title').textContent = `${bookName(book, state.lang)} ${ch}장`;
+  mount($('#reader-title'), h('span', { lang: state.lang }, bookName(book, state.lang)), ` ${ch}장`);
   setPageTitle($('#reader-title').textContent);
   $('#passage').lang = state.lang;
   $('#reader-note').textContent = '';
@@ -658,6 +669,9 @@ async function renderReader(bookId, ch) {
   const next = ch < book.chapters ? `#/read/${bookId}/${ch + 1}` : home;
   $('#reader-prev').href = prev;
   $('#reader-next').href = next;
+  const chapterName = (n) => `${bookName(book, state.lang)} ${n}장`;
+  $('#reader-prev').setAttribute('aria-label', ch > 1 ? `이전 장, ${chapterName(ch - 1)}` : '이전, 읽던 목록으로');
+  $('#reader-next').setAttribute('aria-label', ch < book.chapters ? `다음 장, ${chapterName(ch + 1)}` : '다음, 읽던 목록으로');
   $('#reader-arrow-prev').href = prev;
   $('#reader-arrow-next').href = next;
   mount($('#passage'), h('p', {}, '불러오는 중...'));
@@ -730,9 +744,14 @@ function renderPassage() {
       count
         ? h('button', { type: 'button', class: 'verse__badge', 'data-action': 'verse-memos', 'data-verse': v.n, title: `메모 ${count}개`, 'aria-label': `${v.n}절에 연결된 메모 ${count}개 보기` },
           v.n, count > 1 && h('sup', { class: 'verse__count', 'aria-hidden': 'true' }, count)) // 2개 이상일 때만 표시, aria-label 로 읽히므로 중복 낭독 방지
-        : h('span', { class: 'verse__num' }, v.n), // 스크린리더도 절 번호를 읽을 수 있도록 숨기지 않음
-      h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) }, verseTextNodes(v.text)));
+        : h('span', { class: 'verse__num', 'aria-hidden': 'true' }, v.n), // 절 번호는 아래 버튼 안의 숨김 텍스트로 읽음
+      h('button', { type: 'button', class: 'verse__text', 'aria-pressed': String(on) },
+        h('span', { class: 'visually-hidden', lang: state.lang }, state.lang === 'en' ? `Verse ${v.n}. ` : `${v.n}절 `), // 포커스만 옮겨도 절 번호가 들리도록 버튼 이름에 포함
+        verseTextNodes(v.text)));
   }));
+  const rangeEnd = $('#range-end');
+  rangeEnd.lang = state.lang;
+  mount(rangeEnd, verses.filter((v) => v.text).map((v) => h('option', { value: v.n }, state.lang === 'en' ? `To ${v.n}` : `${v.n}절까지`)));
 }
 
 /** 절 번호 배지 클릭: 그 절에 연결된 메모를 모두 보여 줌 */
@@ -759,12 +778,38 @@ function toggleVerse(n, range) {
   } else if (state.selected.has(n)) state.selected.delete(n);
   else state.selected.add(n);
   lastClicked = n;
+  renderSelection();
+}
+
+/** 선택 상태(state.selected)를 절의 클래스·aria-pressed 와 선택 바에 반영 (클래스만 바꿈) */
+function renderSelection() {
   document.querySelectorAll('.verse').forEach((el) => {
     const on = state.selected.has(Number(el.dataset.verse));
     el.classList.toggle('verse--selected', on);
     el.querySelector('.verse__text').setAttribute('aria-pressed', String(on));
   });
   updateSelectionBar();
+}
+
+/** 범위 선택 상자: 포커스를 받을 때의 선택(base)과 기준 절(anchor)을 기억해 두고, 끝 절을 바꿀 때마다 base + anchor~끝 절로 다시 계산 (방향키로 오가도 지나친 절이 남지 않음) */
+let rangeStart = null;
+function snapshotRange() {
+  rangeStart = state.selected.size ? { anchor: lastClicked ?? Math.max(...state.selected), base: new Set(state.selected) } : null;
+}
+
+function startRange() {
+  snapshotRange();
+  if (rangeStart) $('#range-end').value = rangeStart.anchor; // 현재 값과 다른 항목을 골라야 변경 이벤트가 생기므로 기준 절로 맞춤
+}
+
+function applyRangeEnd(end) {
+  if (!rangeStart) snapshotRange(); // 포커스 이벤트 없이 값만 바뀐 경우 대비
+  if (!rangeStart || !end) return;
+  const { anchor, base } = rangeStart;
+  state.selected.clear();
+  base.forEach((n) => state.selected.add(n));
+  for (let i = Math.min(anchor, end); i <= Math.max(anchor, end); i++) state.selected.add(i);
+  renderSelection();
 }
 
 function updateSelectionBar() {
@@ -774,8 +819,11 @@ function updateSelectionBar() {
   if (!bar.hidden && state.chapter) {
     const ref = formatRef(bookById(state.chapter.bookId), state.lang, state.chapter.ch, [...state.selected]);
     $('#selection-info').textContent = ref;
+    $('#selection-info').lang = state.lang;
+    const rangeSel = $('#range-end');
+    if (document.activeElement !== rangeSel) rangeSel.value = lastClicked ?? Math.max(...state.selected); // 선택 바에 보이는 값을 기준 절에 맞춤
     status.textContent = `${ref} 선택됨`;
-  } else status.textContent = '';
+  } else status.textContent = status.textContent.endsWith('선택됨') ? '선택 해제됨' : '';
 }
 
 /** 구절 선택/메모 저장 후 사라진 버튼 대신 포커스를 둘 곳 */
@@ -988,7 +1036,7 @@ function renderPager(page, pages) {
 function memoCard(m, full) {
   return h('li', { class: 'memo-card', 'data-id': m.id },
     // 카드 전체가 눌리는 영역(::after로 확장)이면서, 키보드·스크린리더용 "읽기" 버튼 역할
-    h('p', { class: 'memo-card__ref' },
+    h('h3', { class: 'memo-card__ref' },
       h('button', { type: 'button', class: 'memo-card__open', lang: m.lang, 'data-action': 'memo-read', 'aria-label': `${refOf(m)} 메모 읽기` }, refOf(m))),
     memoPassagesText(m) && h('p', { class: 'memo-card__verse', lang: m.lang }, full ? memoPassagesText(m) : firstLine(memoPassagesText(m))),
     h('p', { class: 'memo-card__body' }, full ? m.content : firstLine(m.content)),
@@ -1312,9 +1360,9 @@ function renderLabelsDialog() {
 
 /* ================= 이벤트 (위임) ================= */
 const actions = {
-  'day-prev': () => { state.date = shiftISODate(state.date, -1); renderToday(); },
-  'day-next': () => { state.date = shiftISODate(state.date, 1); renderToday(); },
-  'day-today': () => { state.date = toISODate(); renderToday(); },
+  'day-prev': () => { state.date = shiftISODate(state.date, -1); renderToday(); announceDay(); },
+  'day-next': () => { state.date = shiftISODate(state.date, 1); renderToday(); announceDay(); },
+  'day-today': () => { state.date = toISODate(); renderToday(); announceDay(); },
   'copy-selection': copySelection,
   'clear-selection': toggleSelectionReset,
   'memo-new': () => {
@@ -1444,6 +1492,8 @@ document.addEventListener('click', (e) => {
   if (verse) toggleVerse(Number(verse.dataset.verse), e.shiftKey);
 });
 
+document.addEventListener('focusin', (e) => { if (e.target.id === 'range-end') startRange(); });
+
 document.addEventListener('submit', (e) => {
   if (e.target.id === 'memo-form') { e.preventDefault(); saveMemo(e.target); }
   else if (e.target.id === 'label-form') {
@@ -1504,6 +1554,8 @@ document.addEventListener('change', (e) => {
     fillChapterSelect(state.bible.bookId, 1);
   } else if (e.target.id === 'bible-chapter') {
     state.bible.ch = Number(e.target.value);
+  } else if (e.target.id === 'range-end') {
+    applyRangeEnd(Number(e.target.value));
   } else if (e.target.id === 'add-book') {
     syncPicker({ chapter: 1 });
   } else if (e.target.id === 'add-chapter') {
@@ -1513,6 +1565,7 @@ document.addEventListener('change', (e) => {
   } else if (e.target.id === 'date-input' && e.target.value) {
     state.date = e.target.value;
     renderToday();
+    announceDay();
   }
 });
 

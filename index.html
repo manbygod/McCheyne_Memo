@@ -7,10 +7,12 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://content.googleapis.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-10i">
+  <link rel="stylesheet" href="style.css?v=2026-10-13b">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+  <!-- PDF 버튼의 aria-describedby 가 가리키는 설명 (hidden 이라 읽기 순서에는 나오지 않음) -->
+  <p id="pdf-note" hidden>PDF는 이미지 형식이라 스크린리더로 읽을 수 없습니다. 읽기용으로는 TXT를 사용하세요.</p>
 
   <header class="site-header">
     <h1 class="site-header__title"><a href="#/">맥체인 성경읽기</a></h1>
@@ -43,15 +45,16 @@
         <button type="button" class="btn" data-action="day-next" aria-label="다음날">›</button>
         <button type="button" class="btn btn--ghost" data-action="day-today">오늘</button>
       </div>
+      <p class="visually-hidden" id="day-status" role="status"></p>
       <p class="view__note" id="plan-note"></p>
       <ul class="reading-list" id="reading-list" aria-live="polite"></ul>
       <section class="share" aria-labelledby="share-title">
         <h3 class="share__title" id="share-title">오늘의 말씀묵상 공유</h3>
         <div class="share__actions">
-          <button type="button" class="btn btn--primary" data-action="share-meditation" aria-label="PDF 공유">PDF</button>
-          <button type="button" class="btn btn--primary" data-action="share-meditation-ko" aria-label="PDF 공유, 한글">PDF(한글)</button>
           <button type="button" class="btn btn--primary" data-action="share-meditation-txt" aria-label="TXT 공유">TXT</button>
-          <button type="button" class="btn btn--primary" data-action="share-meditation-txt-ko" aria-label="TXT 공유, 한글">TXT(한글)</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation-txt-ko" aria-label="TXT(한글) 공유">TXT(한글)</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation" aria-label="PDF 공유" aria-describedby="pdf-note">PDF</button>
+          <button type="button" class="btn btn--primary" data-action="share-meditation-ko" aria-label="PDF(한글) 공유" aria-describedby="pdf-note">PDF(한글)</button>
         </div>
       </section>
     </section>
@@ -72,9 +75,9 @@
     <!-- 본문 -->
     <section id="view-reader" class="view" aria-labelledby="reader-title" hidden>
       <div class="reader__head">
-        <a class="btn btn--ghost" id="reader-prev" href="#/">‹ 이전</a>
+        <a class="btn btn--ghost" id="reader-prev" href="#/"><span aria-hidden="true">‹</span> 이전</a>
         <h2 class="view__title" id="reader-title" tabindex="-1"></h2>
-        <a class="btn btn--ghost" id="reader-next" href="#/">다음 ›</a>
+        <a class="btn btn--ghost" id="reader-next" href="#/">다음 <span aria-hidden="true">›</span></a>
       </div>
       <p class="visually-hidden" id="find-status" role="status"></p>
       <form class="reader__find" id="find-form" role="search">
@@ -92,6 +95,8 @@
         <span class="selection-bar__info" id="selection-info"></span>
         <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
         <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
+        <label class="visually-hidden" for="range-end">선택한 절부터 이 절까지 범위로 선택</label>
+        <select class="field__control" id="range-end"></select>
         <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
       </div>
       <p class="visually-hidden" id="selection-status" role="status"></p>
@@ -109,7 +114,7 @@
       </form>
       <div class="toolbar" role="group" aria-label="메모 도구">
         <button type="button" class="btn" data-action="dl-txt" aria-label="TXT 저장, 현재 목록을 텍스트 파일로">TXT 저장</button>
-        <button type="button" class="btn" data-action="dl-pdf" aria-label="PDF 저장, 현재 목록을 PDF로">PDF 저장</button>
+        <button type="button" class="btn" data-action="dl-pdf" aria-label="PDF 저장, 현재 목록을 PDF로" aria-describedby="pdf-note">PDF 저장</button>
         <button type="button" class="btn" data-action="labels-open" aria-label="레이블 관리">레이블 관리</button>
         <button type="button" class="btn btn--desktop-only" data-action="memos-import" aria-label="메모 가져오기, JSON 파일에서">메모 가져오기</button>
         <button type="button" class="btn btn--desktop-only" data-action="memos-export" aria-label="메모 내보내기, 모든 메모를 JSON 파일로">메모 내보내기</button>
@@ -125,7 +130,7 @@
   <!-- 메모 작성 -->
   <dialog class="dialog" id="memo-dialog" aria-labelledby="memo-dialog-title">
     <form class="form" id="memo-form" method="dialog">
-      <h2 class="dialog__title dialog__title--drag" id="memo-dialog-title" data-drag-handle title="제목을 끌어서 창 위치 이동">메모 작성</h2>
+      <h2 class="dialog__title dialog__title--drag" id="memo-dialog-title" data-drag-handle>메모 작성</h2>
       <p class="visually-hidden" role="status" data-dialog-status></p>
       <p class="form__ref" id="memo-ref"></p>
       <ul class="memo-passages" id="memo-passages" aria-label="선택된 말씀"></ul>
@@ -226,6 +231,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-13a"></script>
+  <script src="app.js?v=2026-10-13c"></script>
 </body>
 </html>

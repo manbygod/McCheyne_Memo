@@ -966,6 +966,7 @@ async function openPassageView(p) {
   const dialog = $('#passage-view-dialog');
   let verses = null;
   try { verses = await loadChapter(p.bookId, p.chapter, d.lang); } catch { /* 아래에서 안내 */ }
+  $('#passage-view-title').lang = d.lang; // 책 이름이 메모 언어로 표기되므로 올바른 음성으로 낭독
   $('#passage-view-title').textContent = formatRef(bookById(p.bookId), d.lang, p.chapter, []);
   mount($('#passage-view-body'), verses
     ? verses.filter((v) => v.text).map((v) => {

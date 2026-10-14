@@ -202,8 +202,6 @@ textarea.field__control { width: 100%; resize: vertical; }
 .memo-card__open::after { content: ""; position: absolute; inset: 0; } /* 카드 어디를 눌러도 읽기 */
 .memo-card__verse { margin: 4px 0; font-family: var(--font-read); color: var(--c-muted); white-space: pre-line; }
 .memo-card__body { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.memo-card__meta { margin: 4px 0; font-size: .8rem; color: var(--c-muted); }
-.memo-card__actions { position: relative; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; } /* 카드 전체 클릭 영역 위에 놓여 자체 버튼이 눌리도록 */
 
 .pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 16px 0; }
 .pager[hidden] { display: none; }

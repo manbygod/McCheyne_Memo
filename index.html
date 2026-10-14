@@ -173,6 +173,16 @@
     </div>
   </dialog>
 
+  <!-- 메모 작성 중 말씀 보기 (메모 팝업 위에 겹쳐 열림) -->
+  <dialog class="dialog" id="passage-view-dialog" aria-labelledby="passage-view-title">
+    <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>
+    <h2 class="dialog__title" id="passage-view-title"></h2>
+    <div class="dialog__body" id="passage-view-body" tabindex="-1" autofocus></div>
+    <div class="form__actions">
+      <button type="button" class="btn" data-action="dialog-close">닫기</button>
+    </div>
+  </dialog>
+
   <!-- 절에 연결된 메모 -->
   <dialog class="dialog" id="verse-memos-dialog" aria-labelledby="verse-memos-title">
     <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>

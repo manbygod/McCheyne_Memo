@@ -946,7 +946,9 @@ function renderDraft() {
     return h('li', { class: 'memo-passage' },
       h('div', { class: 'memo-passage__head' },
         h('strong', {}, draftRef(d, p)),
-        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'passage-remove', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 삭제` }, '삭제')),
+        h('div', { class: 'memo-passage__actions' },
+          h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'passage-remove', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 삭제` }, '삭제'),
+          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 보기` }, '보기'))),
       nums.length <= 15 && h('ul', { class: 'chips', 'aria-label': '절' }, nums.map((n) =>
         h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'verse-remove', 'data-pi': pi, 'data-verse': n, 'aria-label': `${n}절 제거` }, `${n}절 ×`)))));
   }));
@@ -956,6 +958,27 @@ function renderDraft() {
       h('label', { class: 'check', for: id },
         h('input', { type: 'checkbox', id, name: 'label', value: label, checked: d.labels.has(label) }), label));
   }));
+}
+
+/** 메모에 담긴 말씀의 장 전체를 팝업으로 보여 줌 (메모에 연결된 절은 강조) */
+async function openPassageView(p) {
+  const d = state.draft;
+  const dialog = $('#passage-view-dialog');
+  let verses = null;
+  try { verses = await loadChapter(p.bookId, p.chapter, d.lang); } catch { /* 아래에서 안내 */ }
+  $('#passage-view-title').textContent = formatRef(bookById(p.bookId), d.lang, p.chapter, []);
+  mount($('#passage-view-body'), verses
+    ? verses.filter((v) => v.text).map((v) => {
+      const on = p.verses.has(v.n);
+      return h('p', { class: `passage-view__verse${on ? ' passage-view__verse--linked' : ''}`, lang: d.lang, 'data-n': v.n },
+        h('span', { class: 'passage-view__num' }, v.n),
+        on && h('span', { class: 'visually-hidden' }, d.lang === 'en' ? ' (linked) ' : ' (연결된 절) '),
+        ' ', v.text);
+    })
+    : h('p', {}, '본문을 불러오지 못했습니다.'));
+  moveDialog(dialog, 0, 0);
+  dialog.showModal();
+  $('#passage-view-body').querySelector('.passage-view__verse--linked')?.scrollIntoView({ block: 'center' });
 }
 
 /** 선택기에서 고른 한 구절을 말씀 목록에 추가 (같은 장이면 합침, 추가한 순서 유지 — 첫 말씀이 "본문" 링크 대상) */
@@ -1404,6 +1427,7 @@ const actions = {
     toast(`${draftRef(state.draft, p)} 삭제`);
     focusFirst('#memo-passages button', '#add-book');
   },
+  'passage-view': (el) => openPassageView(state.draft.passages[Number(el.dataset.pi)]),
   'verse-remove': (el) => {
     const { passages } = state.draft;
     const p = passages[Number(el.dataset.pi)];

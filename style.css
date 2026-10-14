@@ -248,6 +248,11 @@ button.chip { cursor: pointer; color: inherit; }
 .memo-passages { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .memo-passage { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 8px 10px; }
 .memo-passage__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.memo-passage__actions { display: flex; flex-direction: column; gap: 6px; }
+.memo-passage__actions .btn { width: 100%; }
+.passage-view__verse { margin: 0 0 6px; padding: 2px 6px; border-radius: 4px; }
+.passage-view__verse--linked { background: color-mix(in srgb, var(--c-select) 40%, transparent); }
+.passage-view__num { font-size: .75rem; color: var(--c-muted); margin-right: 2px; }
 .verse-memo + .verse-memo { border-top: 1px solid var(--c-border); padding-top: 8px; margin-top: 8px; }
 .read__text { margin: 0 0 8px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-read); line-height: 1.8; }
 .form__manage { margin-top: 8px; }

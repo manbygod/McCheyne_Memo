@@ -165,7 +165,7 @@
     <h2 class="dialog__title visually-hidden" id="read-dialog-title">메모 읽기</h2>
     <p class="read__text" id="read-text" tabindex="-1" autofocus></p>
     <div class="form__actions">
-      <a class="btn" id="read-passage" href="#/" data-action="dialog-close">본문</a>
+      <a class="btn" id="read-passage" href="#/" data-action="passage-open">본문</a>
       <button type="button" class="btn" data-action="read-edit">수정</button>
       <button type="button" class="btn" data-action="read-share">공유</button>
       <button type="button" class="btn btn--danger" data-action="read-delete">삭제</button>
@@ -188,6 +188,15 @@
     <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>
     <h2 class="dialog__title" id="verse-memos-title"></h2>
     <div class="dialog__body" id="verse-memos-list" tabindex="-1" autofocus></div>
+    <div class="form__actions">
+      <button type="button" class="btn" data-action="dialog-close">닫기</button>
+    </div>
+  </dialog>
+
+  <!-- 메모에 연결된 장이 여러 개일 때 이동할 장 선택 -->
+  <dialog class="dialog" id="passage-pick-dialog" aria-labelledby="passage-pick-title">
+    <h2 class="dialog__title" id="passage-pick-title">이동할 장 선택</h2>
+    <div class="form__actions form__actions--start" id="passage-pick-list"></div>
     <div class="form__actions">
       <button type="button" class="btn" data-action="dialog-close">닫기</button>
     </div>

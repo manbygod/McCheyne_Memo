@@ -637,7 +637,7 @@ async function loadChapter(bookId, ch, lang) {
 /* ================= 라우팅 ================= */
 function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  if (parts[0] === 'read' && bookById(parts[1])) return { name: 'reader', bookId: parts[1], ch: Number(parts[2]) || 1 };
+  if (parts[0] === 'read' && bookById(parts[1])) return { name: 'reader', bookId: parts[1], ch: Number(parts[2]) || 1, verse: Number(parts[3]) || null };
   if (parts[0] === 'memos') return { name: 'memos' };
   if (parts[0] === 'bible') return { name: 'bible' };
   return { name: 'today' };
@@ -660,7 +660,7 @@ async function route() {
   if (r.name === 'today') renderToday();
   else if (r.name === 'memos') renderMemos();
   else if (r.name === 'bible') renderBible();
-  else await renderReader(r.bookId, r.ch);
+  else await renderReader(r.bookId, r.ch, r.verse);
 }
 
 /* ================= 오늘의 읽기 ================= */
@@ -698,7 +698,7 @@ function renderBible() {
 }
 
 /* ================= 본문 보기/구절 선택 ================= */
-async function renderReader(bookId, ch) {
+async function renderReader(bookId, ch, verse = null) {
   const book = bookById(bookId);
   state.bible = { bookId, ch }; // 성경 메뉴로 돌아오면 마지막으로 읽은 곳이 선택되어 있도록
   state.selected.clear();
@@ -736,6 +736,11 @@ async function renderReader(bookId, ch) {
   state.chapter = { bookId, ch, verses };
   $('#reader-note').textContent = CREDITS[state.lang];
   renderPassage();
+  if (verse) { // 메모의 본문 버튼으로 왔을 때: 첫 구절로 스크롤하고 포커스
+    const btn = document.querySelector(`.verse[data-verse="${verse}"] .verse__text`);
+    btn?.focus();
+    btn?.scrollIntoView({ block: 'center' });
+  }
 }
 
 /** 순수 함수: 본문을 검색어 기준으로 [{text, hit}] 조각으로 나눔 (대소문자 무시) */
@@ -825,12 +830,29 @@ function openChapterMemos() {
   showMemosDialog(ref, list);
 }
 
+/** 순수 함수: 말씀의 본문 링크 (장 이동 + 첫 구절로 스크롤) */
+const passageHref = (p) => `#/read/${p.bookId}/${p.chapter}/${Math.min(...p.verses)}`;
+
+/** 메모 카드의 '본문' 링크. 연결된 장이 둘 이상이면 눌렀을 때 장을 고르는 팝업이 열린다 */
+const passageLink = (m) => h('a', {
+  class: 'btn', href: passageHref(m.passages[0]), 'data-action': 'passage-open',
+  'aria-label': `${refOf(m)} 본문 보기`, ...(m.passages.length > 1 && { 'aria-haspopup': 'dialog' }),
+}, '본문');
+
+/** 연결된 장 선택 팝업 */
+function openPassagePicker(m) {
+  mount($('#passage-pick-list'), m.passages.map((p) =>
+    h('a', { class: 'btn', lang: m.lang, href: passageHref(p), 'data-action': 'passage-go' }, passageRef(m, p))));
+  $('#passage-pick-dialog').showModal();
+  $('#passage-pick-list a').focus(); // 첫 선택지에서 바로 듣고 고를 수 있도록
+}
+
 function showMemosDialog(ref, list) {
   $('#verse-memos-title').replaceChildren(h('span', { lang: state.lang }, ref), ` · 메모 ${list.length}개`);
   mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo', 'data-id': m.id },
     h('p', { class: 'read__text' }, memoNodes(m)),
     h('div', { class: 'form__actions form__actions--start' },
-      h('a', { class: 'btn', href: `#/read/${m.passages[0].bookId}/${m.passages[0].chapter}`, 'data-action': 'dialog-close', 'aria-label': `${refOf(m)} 본문 보기` }, '본문'),
+      passageLink(m),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-edit', 'aria-label': `${refOf(m)} 메모 수정` }, '수정'),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-share', 'aria-label': `${refOf(m)} 메모 공유` }, '공유'),
       h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'memo-delete', 'aria-label': `${refOf(m)} 메모 삭제` }, '삭제')))));
@@ -1161,8 +1183,10 @@ function openReadDialog(m) {
   mount($('#read-text'), memoNodes(m));
   $('#read-dialog').dataset.id = m.id;
   moveDialog($('#read-dialog'), 0, 0);
-  const [first] = m.passages;
-  $('#read-passage').href = `#/read/${first.bookId}/${first.chapter}`;
+  const link = $('#read-passage');
+  link.href = passageHref(m.passages[0]);
+  if (m.passages.length > 1) link.setAttribute('aria-haspopup', 'dialog');
+  else link.removeAttribute('aria-haspopup');
   $('#read-dialog').showModal();
 }
 
@@ -1624,6 +1648,12 @@ const actions = {
   'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
+  'passage-open': (el, e) => {
+    const m = state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id);
+    if (m?.passages.length > 1) { e.preventDefault(); openPassagePicker(m); } // 장을 고른 뒤에 이동
+    else el.closest('dialog').close();
+  },
+  'passage-go': () => document.querySelectorAll('dialog[open]').forEach((d) => d.close()), // 이동하면 열린 팝업을 모두 닫음
   'memo-edit': (el) => { el.closest('dialog')?.close(); editMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
   'read-edit': (el) => withReadMemo(el, editMemo),
   'read-share': (el) => withReadMemo(el, shareMemo),
@@ -1722,7 +1752,7 @@ document.addEventListener('pointercancel', () => { dragging = null; });
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
-  if (el) { actions[el.dataset.action]?.(el); return; }
+  if (el) { actions[el.dataset.action]?.(el, e); return; }
   const verse = e.target.closest('.verse');
   if (verse) toggleVerse(Number(verse.dataset.verse), e.shiftKey);
 });

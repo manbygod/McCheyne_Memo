@@ -18,7 +18,7 @@ python -m http.server 8000      # 또는: npx serve .
 - 메모: 다른 책·장의 말씀까지 한 구절씩 추가·제거(책/장/절 선택 + 본문 미리보기), 레이블 복수 선택, 레이블 추가/삭제, 수정, 읽기 팝업(PDF 저장과 같은 내용), 삭제(첫 줄만 보여 주는 confirm)
 - 게시판: 한 페이지 4건씩 페이지 이동, 작성일 desc / 검색(단어·레이블·구절) 시 수정일 desc
 - 공유: Web Share API(카카오톡·메시지·메일), 미지원 시 클립보드 복사
-- 다운로드: TXT, PDF(인쇄 → "PDF로 저장"), 전체 또는 검색 결과
+- 다운로드: TXT, PDF(글꼴을 내장한 텍스트 PDF — 선택·복사·검색·스크린리더 낭독 가능), 전체 또는 검색 결과
 
 ## ⚠️ 알아둘 점
 ### 성경 본문 저작권
@@ -31,6 +31,12 @@ python -m http.server 8000      # 또는: npx serve .
   원문에서 사본에 없는 절(예: 마 17:21, 행 8:37)은 빈 문자열로 두어 절 번호를 유지하며, 화면에는 표시하지 않습니다.
   개역한글과는 일부 장(삼상 30, 시 72, 아 6, 고후 13, 요삼 1)의 절 구분이 다릅니다. 메모는 작성한 언어의 절 번호를 저장합니다.
 - NIV는 저작권 보호 대상이라 번들하지 않습니다 (NIV 1984는 현재 합법적으로 열람 가능한 온라인 사이트도 없음).
+
+### PDF 글꼴 (Noto Sans KR 부분집합)
+PDF는 이미지가 아니라 진짜 글자로 만들며, `fonts/NotoSansKR-subset.ttf`(+ 글리프 지표 `NotoSansKR-subset.json`)를 PDF 만들 때 불러와, **실제로 쓰인 글자만** 다시 잘라 PDF에 내장합니다.
+- 글꼴: [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR) Regular(400), SIL OFL 1.1 (`fonts/LICENSE-NotoSansKR.txt`). 굵은 글씨는 같은 글꼴에 윤곽선을 덧그려 표현합니다.
+- 포함 글자: KS X 1001(한글 2,350자·기호, 한자 제외) + ASCII·라틴·문장부호 + 개역한글·BSB 본문과 `data/memos.json`에 쓰인 글자. 글꼴에 없는 글자는 PDF에서 `?`로, 이모지는 빠집니다.
+- 다시 만들 때(개발용, 앱 실행에는 불필요): `pip install fonttools` 후 `python scripts/gen-pdf-font.py <NotoSansKR[wght].ttf 경로>`
 
 ### 읽기표
 `data/plan.json`은 2026 맥체인 성경 읽기표(365일 × 4트랙)입니다.

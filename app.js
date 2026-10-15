@@ -317,61 +317,55 @@ function paginateCards(cards, { firstTop, top, bottom, pad = 14, gap = 12 }) {
   return pages;
 }
 
-const utf16Hex = (t) => Array.from({ length: t.length }, (_, i) => t.charCodeAt(i).toString(16).padStart(4, '0')).join('').toUpperCase();
-
-/** 투명 텍스트 층(렌더 모드 3) 연산: 화면에는 그리지 않지만 선택·검색·스크린리더 낭독에 쓰인다. runs: [{text, x, y, w, lh}] (페이지 좌표계 css px, 위쪽 기준) */
-function textLayerOps(runs, sx, sy, pageH) {
-  return runs.map((r) => ({ ...r, text: r.text.replace(/[\u{10000}-\u{10FFFF}]/gu, '') })) // 이모지 등 BMP 밖 글자는 2바이트 글자코드로 표현할 수 없어 뺌
-    .filter((r) => r.text.trim()).map((r) => {
-    const size = Math.max(4, r.lh * 0.6 * sy);
-    const tz = r.w > 0 ? (100 * r.w * sx) / (r.text.length * size) : 100; // 글꼴 폭을 가정(1em)하고 실제 줄 폭에 맞춰 가로 배율 조정
-    const y = pageH - (r.y + r.lh / 2) * sy - size * 0.3;
-    return `BT 3 Tr /F1 ${size.toFixed(2)} Tf ${tz.toFixed(1)} Tz 1 0 0 1 ${(r.x * sx).toFixed(2)} ${y.toFixed(2)} Tm <${utf16Hex(r.text)}> Tj ET`;
-  }).join('\n');
-}
-
-/** 페이지 이미지 위에 투명 텍스트 층을 얹은 PDF 파일 바이트 생성 (외부 라이브러리 없이).
- *  pages: [{jpeg: Uint8Array, width, height, cssW, cssH, runs}]. 글꼴은 심지 않고 ToUnicode(글자코드=유니코드)만 둔다 — 글자가 보이지 않으므로 글꼴이 필요 없고, 텍스트 추출용 매핑만 있으면 된다. */
-function buildPdf(pages, pageW = 595.28, pageH = 841.89) {
+/** 페이지 내용(그리기 명령)과 내장 글꼴로 PDF 파일 바이트 생성 (외부 라이브러리 없이).
+ *  contents: 페이지별 내용 스트림 문자열. fnt: {font: 글꼴 지표, used: Map(글리프 번호→글자), fontFile: 잘라낸 TTF, packed: deflate한 TTF|null, title}.
+ *  글꼴은 CIDFontType2 + Identity-H(글자코드=글리프 번호)로 내장하고, ToUnicode로 복사·검색·스크린리더 낭독에 쓰일 글자를 알려 준다. */
+function buildPdf(contents, fnt, pageW = 595, pageH = 842) {
   const enc = new TextEncoder();
   const chunks = [];
   const offsets = [];
   let len = 0;
   const push = (d) => { const b = typeof d === 'string' ? enc.encode(d) : d; chunks.push(b); len += b.length; };
   const begin = (n) => { offsets[n] = len; push(`${n} 0 obj\n`); };
-  const font = 3 + 3 * pages.length; // 글꼴 객체 4개: Type0, CIDFont, FontDescriptor, ToUnicode
-  push('%PDF-1.4\n');
-  begin(1); push('<< /Type /Catalog /Pages 2 0 R /Lang (ko-KR) >>\nendobj\n');
+  const stream = (n, dict, body) => {
+    const bytes = typeof body === 'string' ? enc.encode(body) : body;
+    begin(n); push(`<< ${dict} /Length ${bytes.length} >>\nstream\n`); push(bytes); push('\nendstream\nendobj\n');
+  };
+  const { font, used, fontFile, packed, title } = fnt;
+  const font0 = 3 + 2 * contents.length; // 글꼴 객체: Type0, CIDFont, FontDescriptor, FontFile2, ToUnicode, Info
+  push('%PDF-1.5\n');
+  begin(1); push('<< /Type /Catalog /Pages 2 0 R /Lang (ko-KR) /ViewerPreferences << /DisplayDocTitle true >> >>\nendobj\n');
   begin(2);
-  push(`<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(' ')}] >>\nendobj\n`);
-  pages.forEach((p, i) => {
-    const [pg, ct, im] = [3 + 3 * i, 4 + 3 * i, 5 + 3 * i];
-    const text = p.runs?.length ? `\n${textLayerOps(p.runs, pageW / p.cssW, pageH / p.cssH, pageH)}` : '';
-    const content = `q ${pageW} 0 0 ${pageH} 0 0 cm /Im0 Do Q${text}`;
-    begin(pg);
-    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /XObject << /Im0 ${im} 0 R >> /Font << /F1 ${font} 0 R >> >> /Contents ${ct} 0 R >>\nendobj\n`);
-    begin(ct);
-    push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj\n`);
-    begin(im);
-    push(`<< /Type /XObject /Subtype /Image /Width ${p.width} /Height ${p.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpeg.length} >>\nstream\n`);
-    push(p.jpeg);
-    push('\nendstream\nendobj\n');
+  push(`<< /Type /Pages /Count ${contents.length} /Kids [${contents.map((_, i) => `${3 + 2 * i} 0 R`).join(' ')}] >>\nendobj\n`);
+  contents.forEach((content, i) => {
+    begin(3 + 2 * i);
+    push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}] /Resources << /Font << /F1 ${font0} 0 R >> >> /Contents ${4 + 2 * i} 0 R >>\nendobj\n`);
+    stream(4 + 2 * i, '', content);
   });
-  const cmap = '/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def /CMapType 2 def\n'
-    + '1 begincodespacerange <0000> <FFFF> endcodespacerange\n1 beginbfrange <0000> <FFFF> <0000> endbfrange\nendcmap CMapName currentdict /CMap defineresource pop end end';
-  begin(font);
-  push(`<< /Type /Font /Subtype /Type0 /BaseFont /Invisible /Encoding /Identity-H /DescendantFonts [${font + 1} 0 R] /ToUnicode ${font + 3} 0 R >>\nendobj\n`);
-  begin(font + 1);
-  push(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Invisible /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${font + 2} 0 R /DW 1000 /CIDToGIDMap /Identity >>\nendobj\n`);
-  begin(font + 2);
-  push('<< /Type /FontDescriptor /FontName /Invisible /Flags 4 /FontBBox [0 -200 1000 900] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 700 /StemV 80 >>\nendobj\n');
-  begin(font + 3);
-  push(`<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream\nendobj\n`);
-  const count = font + 4;
+  const scale = 1000 / font.upm;
+  const gids = [...used.keys()].sort((a, b) => a - b);
+  begin(font0);
+  push(`<< /Type /Font /Subtype /Type0 /BaseFont /NotoSansKR /Encoding /Identity-H /DescendantFonts [${font0 + 1} 0 R] /ToUnicode ${font0 + 4} 0 R >>\nendobj\n`);
+  begin(font0 + 1);
+  push(`<< /Type /Font /Subtype /CIDFontType2 /BaseFont /NotoSansKR /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${font0 + 2} 0 R /DW 1000 /W [${gids.map((g) => `${g} [${Math.round(font.adv[g] * scale)}]`).join(' ')}] /CIDToGIDMap /Identity >>\nendobj\n`);
+  begin(font0 + 2);
+  push(`<< /Type /FontDescriptor /FontName /NotoSansKR /Flags 4 /FontBBox [${font.bbox.map((v) => Math.round(v * scale)).join(' ')}] /ItalicAngle 0 /Ascent ${Math.round(font.ascent * scale)} /Descent ${Math.round(font.descent * scale)} /CapHeight ${Math.round(font.capHeight * scale)} /StemV 80 /FontFile2 ${font0 + 3} 0 R >>\nendobj\n`);
+  stream(font0 + 3, packed ? `/Filter /FlateDecode /Length1 ${fontFile.length}` : `/Length1 ${fontFile.length}`, packed ?? fontFile);
+  const bf = gids.filter((g) => used.get(g));
+  let cmap = '/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Adobe-Identity-UCS def /CMapType 2 def\n1 begincodespacerange <0000> <FFFF> endcodespacerange\n';
+  for (let i = 0; i < bf.length; i += 100) {
+    const part = bf.slice(i, i + 100);
+    cmap += `${part.length} beginbfchar\n${part.map((g) => `<${hex4(g)}> <${utf16Hex(used.get(g))}>`).join('\n')}\nendbfchar\n`;
+  }
+  cmap += 'endcmap CMapName currentdict /CMap defineresource pop end end';
+  stream(font0 + 4, '', cmap);
+  begin(font0 + 5);
+  push(`<< /Title <FEFF${utf16Hex(title)}> /Producer (McCheyne) >>\nendobj\n`);
+  const count = font0 + 6;
   const xref = len;
   push(`xref\n0 ${count}\n0000000000 65535 f \n`);
   for (let n = 1; n < count; n++) push(`${String(offsets[n]).padStart(10, '0')} 00000 n \n`);
-  push(`trailer\n<< /Size ${count} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
+  push(`trailer\n<< /Size ${count} /Root 1 0 R /Info ${font0 + 5} 0 R >>\nstartxref\n${xref}\n%%EOF\n`);
   const out = new Uint8Array(len);
   let pos = 0;
   for (const c of chunks) { out.set(c, pos); pos += c.length; }
@@ -1147,72 +1141,218 @@ async function shareText(text) {
   copyText(text, '공유 기능이 없어 클립보드에 복사했습니다.');
 }
 
-/* ---- 오늘의 말씀묵상 카드 PDF ---- */
-const CARD_PDF = { w: 595, h: 842, scale: 3, margin: 36, pad: 14,
-  sans: '"Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif',
-  serif: '"Literata", "Batang", "Noto Serif KR", serif',
+/* ---- 오늘의 말씀묵상 카드 PDF (Noto Sans KR 부분집합을 PDF에 내장한 텍스트 PDF) ---- */
+const CARD_PDF = { w: 595, h: 842, margin: 36, pad: 14,
   c: { bg: '#faf8f4', card: '#ffffff', border: '#ddd6c8', text: '#222222', muted: '#666666', primary: '#2f5d50', verse: '#f3efe4' } };
 
-/** 메모 한 건 → 카드 안에 그릴 줄 목록 */
-function memoCardLines(m, ctx) {
-  const { sans, serif, c, w, margin, pad } = CARD_PDF;
+let pdfFontPromise = null;
+/** fonts/ 의 Noto Sans KR 부분집합(글리프 지표 JSON + TTF)을 한 번만 불러온다. 형식이 맞지 않으면 오류 */
+function loadPdfFont() {
+  pdfFontPromise ??= Promise.all([
+    fetch('fonts/NotoSansKR-subset.json').then((r) => { if (!r.ok) throw new Error('글꼴 지표를 불러오지 못했습니다.'); return r.json(); }),
+    fetch('fonts/NotoSansKR-subset.ttf').then((r) => { if (!r.ok) throw new Error('글꼴 파일을 불러오지 못했습니다.'); return r.arrayBuffer(); }),
+  ]).then(([meta, ttf]) => {
+    const ok = meta && Number.isFinite(meta.upm) && Array.isArray(meta.adv) && meta.map && typeof meta.map === 'object' && Array.isArray(meta.bbox);
+    if (!ok) throw new Error('글꼴 지표 형식이 올바르지 않습니다.');
+    return { meta, ttf: new Uint8Array(ttf) };
+  }).catch((e) => { pdfFontPromise = null; throw e; });
+  return pdfFontPromise;
+}
+
+/** 글꼴에 없는 글자 정리: 이모지·결합 부호는 빼고, 그 밖의 없는 글자는 '?'로 바꾼다 (글꼴에 있는 글자만 PDF에 쓸 수 있음) */
+function pdfSafeText(meta, text) {
+  let out = '';
+  for (const ch of String(text).replace(/\t/g, ' ').replace(/\r/g, '')) {
+    if (ch === '\n' || meta.map[ch.codePointAt(0)] !== undefined) out += ch;
+    else if (!/[\p{Extended_Pictographic}\p{M}\p{Cf}\p{Cc}]/u.test(ch)) out += '?';
+  }
+  return out;
+}
+
+const glyphOf = (meta, ch) => meta.map[ch.codePointAt(0)] ?? 0;
+
+/** 글자 크기 size(px)로 쓸 때의 너비 */
+function textWidth(meta, text, size) {
+  let units = 0;
+  for (const ch of text) units += meta.adv[glyphOf(meta, ch)] ?? 0;
+  return (units / meta.upm) * size;
+}
+
+/** 쓰인 글자의 글리프 번호 → 유니코드 글자 (글꼴 잘라내기·ToUnicode용) */
+function usedGlyphs(meta, texts) {
+  const used = new Map([[0, '']]);
+  for (const t of texts) for (const ch of t) used.set(glyphOf(meta, ch), ch);
+  return used;
+}
+
+const hex4 = (n) => n.toString(16).padStart(4, '0').toUpperCase();
+const pdfNum = (n) => String(Math.round(n * 100) / 100);
+const pdfRgb = (css) => [1, 3, 5].map((i) => pdfNum(parseInt(css.slice(i, i + 2), 16) / 255)).join(' ');
+const utf16Hex = (t) => Array.from({ length: t.length }, (_, i) => hex4(t.charCodeAt(i))).join('');
+
+/** TrueType 글꼴에서 쓰인 글리프만 남긴 새 글꼴 바이트 (글리프 번호는 그대로 — 안 쓰는 글리프는 빈 윤곽) */
+function subsetTtf(ttf, used) {
+  const dv = new DataView(ttf.buffer, ttf.byteOffset, ttf.byteLength);
+  const tables = {};
+  for (let i = 0; i < dv.getUint16(4); i++) {
+    const at = 12 + 16 * i;
+    const tag = String.fromCharCode(...ttf.subarray(at, at + 4));
+    tables[tag] = ttf.subarray(dv.getUint32(at + 8), dv.getUint32(at + 8) + dv.getUint32(at + 12));
+  }
+  const numGlyphs = new DataView(tables.maxp.buffer, tables.maxp.byteOffset).getUint16(4);
+  const longLoca = new DataView(tables.head.buffer, tables.head.byteOffset).getInt16(50) === 1;
+  const loca = new DataView(tables.loca.buffer, tables.loca.byteOffset);
+  const locaAt = (g) => (longLoca ? loca.getUint32(4 * g) : loca.getUint16(2 * g) * 2);
+  const glyph = (g) => tables.glyf.subarray(locaAt(g), locaAt(g + 1));
+  const keep = new Set(used.keys());
+  const queue = [...keep]; // 합성 글리프가 가리키는 부품 글리프도 함께 남긴다
+  while (queue.length) {
+    const data = glyph(queue.pop());
+    if (data.length < 10) continue;
+    const gv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    if (gv.getInt16(0) >= 0) continue;
+    let p = 10;
+    let flags;
+    do {
+      flags = gv.getUint16(p);
+      const part = gv.getUint16(p + 2);
+      if (!keep.has(part)) { keep.add(part); queue.push(part); }
+      p += 4 + (flags & 1 ? 4 : 2) + (flags & 8 ? 2 : flags & 0x40 ? 4 : flags & 0x80 ? 8 : 0);
+    } while (flags & 0x20);
+  }
+  const parts = [];
+  const newLoca = new DataView(new ArrayBuffer(4 * (numGlyphs + 1)));
+  let size = 0;
+  for (let g = 0; g < numGlyphs; g++) {
+    newLoca.setUint32(4 * g, size);
+    if (!keep.has(g)) continue;
+    const data = glyph(g);
+    const padded = new Uint8Array(Math.ceil(data.length / 4) * 4);
+    padded.set(data);
+    parts.push(padded);
+    size += padded.length;
+  }
+  newLoca.setUint32(4 * numGlyphs, size);
+  const glyf = new Uint8Array(size);
+  let pos = 0;
+  for (const part of parts) { glyf.set(part, pos); pos += part.length; }
+  const head = tables.head.slice();
+  new DataView(head.buffer).setInt16(50, 1); // loca를 긴 형식으로 다시 씀
+  new DataView(head.buffer).setUint32(8, 0); // checkSumAdjustment
+  const out = { glyf, head, hhea: tables.hhea, hmtx: tables.hmtx, loca: new Uint8Array(newLoca.buffer), maxp: tables.maxp };
+  const tags = Object.keys(out).sort();
+  const dirEnd = 12 + 16 * tags.length;
+  const total = tags.reduce((n, t) => n + Math.ceil(out[t].length / 4) * 4, dirEnd);
+  const file = new Uint8Array(total);
+  const fv = new DataView(file.buffer);
+  fv.setUint32(0, 0x00010000);
+  fv.setUint16(4, tags.length);
+  fv.setUint16(6, 16 * 2 ** Math.floor(Math.log2(tags.length)));
+  fv.setUint16(8, Math.floor(Math.log2(tags.length)));
+  fv.setUint16(10, 16 * tags.length - fv.getUint16(6));
+  let off = dirEnd;
+  tags.forEach((tag, i) => {
+    const t = out[tag];
+    const padded = new Uint8Array(Math.ceil(t.length / 4) * 4);
+    padded.set(t);
+    let sum = 0;
+    const pv = new DataView(padded.buffer);
+    for (let k = 0; k < padded.length; k += 4) sum = (sum + pv.getUint32(k)) >>> 0;
+    const at = 12 + 16 * i;
+    file.set(new TextEncoder().encode(tag), at);
+    fv.setUint32(at + 4, sum);
+    fv.setUint32(at + 8, off);
+    fv.setUint32(at + 12, t.length);
+    file.set(padded, off);
+    off += padded.length;
+  });
+  return file;
+}
+
+/** 페이지 그리기 명령(PDF 연산자 문자열). 좌표는 화면처럼 왼쪽 위가 원점이고 단위는 px(=pt) */
+const pdfOps = {
+  rect: (h, x, y, w, ht, fill) => `${pdfRgb(fill)} rg ${pdfNum(x)} ${pdfNum(h - y - ht)} ${pdfNum(w)} ${pdfNum(ht)} re f`,
+  roundRect: (h, x, y, w, ht, r, fill, stroke) => {
+    const k = 0.5523 * r;
+    const [yb, yt] = [h - y - ht, h - y];
+    const n = [
+      x + r, yb, 'm', x + w - r, yb, 'l', x + w - r + k, yb, x + w, yb + r - k, x + w, yb + r, 'c',
+      x + w, yt - r, 'l', x + w, yt - r + k, x + w - r + k, yt, x + w - r, yt, 'c',
+      x + r, yt, 'l', x + r - k, yt, x, yt - r + k, x, yt - r, 'c',
+      x, yb + r, 'l', x, yb + r - k, x + r - k, yb, x + r, yb, 'c', 'h',
+    ].map((v) => (typeof v === 'number' ? pdfNum(v) : v)).join(' ');
+    return `${pdfRgb(fill)} rg ${pdfRgb(stroke)} RG 1 w ${n} B`;
+  },
+  /** 글줄 하나. (x, cy): 글줄 상자의 왼쪽·세로 가운데. 굵은 글씨는 같은 글꼴에 윤곽선을 덧그려 만든다 */
+  text: (font, h, text, x, cy, size, color, bold) => {
+    const gids = Array.from(text, (ch) => hex4(glyphOf(font.meta, ch))).join('');
+    const baseline = h - cy - size * 0.36;
+    const weight = bold ? `2 Tr ${pdfRgb(color)} RG ${pdfNum(size * 0.035)} w` : '0 Tr';
+    return `BT /F1 ${pdfNum(size)} Tf ${pdfRgb(color)} rg ${weight} ${pdfNum(x)} ${pdfNum(baseline)} Td <${gids}> Tj ET`;
+  },
+};
+
+/** 메모 한 건 → 카드 안에 그릴 줄 목록 (글자가 PDF 글꼴에 있는 것만 남긴 뒤 줄바꿈) */
+function memoCardLines(m, font) {
+  const { c, w, margin, pad } = CARD_PDF;
   const inner = w - 2 * margin - 2 * pad;
   const lines = [];
-  const add = (text, font, color, lh, extra = {}) => {
-    ctx.font = font;
-    for (const t of wrapText(text, inner - (extra.indent ?? 0), (s) => ctx.measureText(s).width)) lines.push({ text: t, font, color, lh, ...extra });
+  const add = (text, size, bold, color, lh, extra = {}) => {
+    const safe = pdfSafeText(font.meta, text);
+    for (const t of wrapText(safe, inner - (extra.indent ?? 0), (s) => textWidth(font.meta, s, size))) lines.push({ text: t, size, bold, color, lh, ...extra });
   };
   const gap = (lh) => lines.push({ text: '', lh });
   m.passages.forEach((p, i) => {
     if (i) gap(8);
-    add(passageRef(m, p), `bold 14px ${sans}`, c.primary, 22);
-    if (p.text) add(p.text, `13px ${serif}, ${sans}`, c.text, 20, { bg: c.verse, indent: 8 });
+    add(passageRef(m, p), 14, true, c.primary, 22);
+    if (p.text) add(p.text, 13, false, c.text, 20, { bg: c.verse, indent: 8 });
   });
   gap(10);
-  add(m.content, `14px ${sans}`, c.text, 22);
+  add(m.content, 14, false, c.text, 22);
   return lines;
 }
 
 /** 메모들을 카드 형태의 PDF(Blob)로 만듦 */
 async function makeMeditationPdf(memos, iso, { title = '오늘의 말씀묵상', subtitle } = {}) {
-  const { w, h, scale, margin, pad, sans, c } = CARD_PDF;
-  try { await Promise.all(['13px "Literata"', 'bold 14px "Literata"'].map((f) => document.fonts.load(f))); } catch { /* 폰트 없으면 대체 글꼴 */ }
-  const canvas = h_canvas(w * scale, h * scale);
-  const ctx = canvas.getContext('2d');
-  const cards = memos.map((m) => memoCardLines(m, ctx));
+  const { w, h, margin, pad, c } = CARD_PDF;
+  const font = await loadPdfFont();
+  const cards = memos.map((m) => memoCardLines(m, font));
   const pages = paginateCards(cards, { firstTop: margin + 64, top: margin, bottom: h - margin - 16, pad });
-  const dateLabel = subtitle ?? new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' });
-  const out = [];
-  for (let pi = 0; pi < pages.length; pi++) {
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.fillStyle = c.bg;
-    ctx.fillRect(0, 0, w, h);
-    ctx.textBaseline = 'middle';
-    const runs = []; // 투명 텍스트 층용 (읽는 순서대로)
-    const draw = (text, x, y, lh) => { ctx.fillText(text, x, y); runs.push({ text, x, y: y - lh / 2, w: ctx.measureText(text).width, lh }); };
+  const dateLabel = pdfSafeText(font.meta, subtitle ?? new Date(`${iso}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' }));
+  const texts = []; // 실제로 쓴 글자 (글꼴 잘라내기용)
+  const text = (t, x, cy, size, color, bold) => { texts.push(t); return pdfOps.text(font, h, t, x, cy, size, color, bold); };
+  const content = pages.map((segs, pi) => {
+    const ops = [pdfOps.rect(h, 0, 0, w, h, c.bg)];
     if (pi === 0) {
-      ctx.fillStyle = c.primary; ctx.font = `bold 24px ${sans}`; draw(title, margin, margin + 20, 30);
-      ctx.fillStyle = c.muted; ctx.font = `13px ${sans}`; draw(dateLabel, margin, margin + 46, 20);
+      ops.push(text(pdfSafeText(font.meta, title), margin, margin + 20, 24, c.primary, true));
+      ops.push(text(dateLabel, margin, margin + 46, 13, c.muted, false));
     }
-    for (const seg of pages[pi]) {
-      ctx.beginPath(); ctx.roundRect(margin, seg.y, w - 2 * margin, seg.h, 10);
-      ctx.fillStyle = c.card; ctx.fill(); ctx.strokeStyle = c.border; ctx.lineWidth = 1; ctx.stroke();
+    for (const seg of segs) {
+      ops.push(pdfOps.roundRect(h, margin, seg.y, w - 2 * margin, seg.h, 10, c.card, c.border));
       let y = seg.y + pad;
       for (const it of seg.items) {
-        if (it.bg) { ctx.fillStyle = it.bg; ctx.fillRect(margin + pad, y, w - 2 * margin - 2 * pad, it.lh); }
-        if (it.text) { ctx.font = it.font; ctx.fillStyle = it.color; draw(it.text, margin + pad + (it.indent ?? 0), y + it.lh / 2, it.lh); }
+        if (it.bg) ops.push(pdfOps.rect(h, margin + pad, y, w - 2 * margin - 2 * pad, it.lh, it.bg));
+        if (it.text) ops.push(text(it.text, margin + pad + (it.indent ?? 0), y + it.lh / 2, it.size, it.color, it.bold));
         y += it.lh;
       }
     }
-    ctx.fillStyle = c.muted; ctx.font = `11px ${sans}`; ctx.textAlign = 'center';
-    ctx.fillText(`${pi + 1} / ${pages.length}`, w / 2, h - margin / 2); ctx.textAlign = 'start';
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
-    out.push({ jpeg: new Uint8Array(await blob.arrayBuffer()), width: canvas.width, height: canvas.height, cssW: w, cssH: h, runs });
-  }
-  return new Blob([buildPdf(out)], { type: 'application/pdf' });
+    const label = `${pi + 1} / ${pages.length}`;
+    ops.push(text(label, (w - textWidth(font.meta, label, 11)) / 2, h - margin / 2, 11, c.muted, false));
+    return ops.join('\n');
+  });
+  const used = usedGlyphs(font.meta, texts);
+  const fontFile = subsetTtf(font.ttf, used);
+  const packed = await deflate(fontFile);
+  return new Blob([buildPdf(content, { font: font.meta, used, fontFile, packed, title: pdfSafeText(font.meta, title) }, w, h)], { type: 'application/pdf' });
 }
 
-const h_canvas = (width, height) => Object.assign(document.createElement('canvas'), { width, height });
+/** deflate 압축 (CompressionStream 미지원 브라우저는 null → 압축 없이 저장) */
+async function deflate(bytes) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'))).arrayBuffer());
+  } catch { return null; }
+}
 
 /** 영어 메모의 말씀을 개역한글 본문으로 바꾼 사본 (원본 메모는 그대로). 본문을 못 불러오면 원래 본문 유지 */
 async function toKorean(m) {

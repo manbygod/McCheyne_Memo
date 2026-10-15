@@ -1,7 +1,7 @@
 'use strict';
 
 /* ================= 설정 ================= */
-const KEYS = { memos: 'mccheyne.memos.v1', labels: 'mccheyne.labels.v1', lang: 'mccheyne.lang', deleted: 'mccheyne.deleted.v1' };
+const KEYS = { memos: 'mccheyne.memos.v1', labels: 'mccheyne.labels.v1', lang: 'mccheyne.lang', deleted: 'mccheyne.deleted.v1', labelsAt: 'mccheyne.labelsAt.v1' };
 // 본문은 공유 저작물만 번들: ko = 개역한글(1961), en = Berean Standard Bible (모두 data/bible/<lang>/<bookId>.json)
 const BIBLE_FILE = (lang, id) => `data/bible/${lang}/${id}.json`;
 const CREDITS = {
@@ -81,6 +81,20 @@ function labelsWithMemos(labels, memos) {
   return extra.length ? [...labels, ...extra] : labels;
 }
 
+/** 클라우드 레이블 문서({labels, updatedAt})가 쓸 만한 모양인지 */
+const isLabelsDoc = (d) => !!d && Array.isArray(d.labels) && isIsoDate(d.updatedAt)
+  && d.labels.length <= MEMO_LIMITS.labelList && d.labels.every((l) => typeof l === 'string' && l && l.length <= MEMO_LIMITS.label);
+
+/**
+ * 로컬·클라우드 레이블 목록을 병합 (순수 함수). 목록 전체를 updatedAt 이 최신인 쪽이 이긴다.
+ * 돌려주는 at 은 채택한 목록의 시각, upload 는 클라우드에 올려야 하는지.
+ */
+function mergeLabels(local, localAt, remote, now) {
+  if (!remote) return { labels: local, at: localAt || now, upload: true };
+  if (remote.updatedAt > localAt) return { labels: remote.labels, at: remote.updatedAt, upload: false };
+  return { labels: local, at: localAt, upload: localAt > remote.updatedAt };
+}
+
 const sortLabels = (labels) => [...labels].sort((a, b) => a.localeCompare(b, 'ko'));
 
 const byUpdatedDesc = (a, b) => b.updatedAt.localeCompare(a.updatedAt);
@@ -106,7 +120,7 @@ function normalizeMemo(m) {
 }
 
 /** 외부(가져오기·클라우드) 메모의 크기 상한. scripts/firestore.rules 와 맞춘다. */
-const MEMO_LIMITS = { id: 128, text: 20000, labels: 50, label: 100, passages: 50, verses: 200, date: 40 };
+const MEMO_LIMITS = { id: 128, text: 20000, labels: 50, labelList: 500, label: 100, passages: 50, verses: 200, date: 40 };
 
 const isIsoDate = (s) => typeof s === 'string' && s.length <= MEMO_LIMITS.date && !Number.isNaN(Date.parse(s));
 const isPassage = (p) => Number.isInteger(p.chapter) && p.chapter >= 1 && Array.isArray(p.verses)
@@ -477,6 +491,8 @@ async function initFirebase(cfg) {
     const col = fs.collection(db, 'users', user.uid, 'memos');
     state.remote = {
       list: async () => (await fs.getDocs(col)).docs.map((d) => d.data()),
+      getLabels: async () => { const snap = await fs.getDoc(fs.doc(db, 'users', user.uid, 'meta', 'labels')); return snap.exists() ? snap.data() : null; },
+      saveLabels: (doc) => fs.setDoc(fs.doc(db, 'users', user.uid, 'meta', 'labels'), doc), // 빈 레이블까지 포함한 목록 전체
       save: (doc) => fs.setDoc(fs.doc(col, doc.id), doc), // 메모 또는 삭제 기록({id, deletedAt}) 한 문서
     };
     renderAuth();
@@ -486,12 +502,19 @@ async function initFirebase(cfg) {
 
 const persistMemos = () => writeJSON(KEYS.memos, state.memos);
 const persistTombs = () => writeJSON(KEYS.deleted, state.tombstones);
-const persistLabels = () => writeJSON(KEYS.labels, state.labels);
+/** 레이블 목록 저장. touch 면 변경 시각을 갱신하고 클라우드에도 올린다 (메모에서 파생된 보충은 touch 하지 않음) */
+function persistLabels(touch = true) {
+  writeJSON(KEYS.labels, state.labels);
+  if (!touch) return;
+  state.labelsAt = new Date().toISOString();
+  writeJSON(KEYS.labelsAt, state.labelsAt);
+  remoteCall((r) => r.saveLabels({ labels: state.labels, updatedAt: state.labelsAt }));
+}
 
 /** 메모에 쓰인 레이블을 목록에 반영 (다른 기기·원격 메모의 레이블이 이 기기 목록에 없을 때) */
 function syncLabelsFromMemos() {
   const next = labelsWithMemos(state.labels, state.memos);
-  if (next !== state.labels) { state.labels = next; persistLabels(); }
+  if (next !== state.labels) { state.labels = next; persistLabels(false); }
 }
 const remoteCall = (fn) => state.remote && fn(state.remote).catch(() => toast('클라우드 동기화 실패 (이 기기에는 저장됨)'));
 
@@ -521,10 +544,16 @@ async function syncRemote() {
     const r = reconcile(state.memos, state.tombstones, cleanMemos(docs.filter((d) => !d.deletedAt)), remoteTombs);
     state.memos = r.memos;
     state.tombstones = r.tombstones;
+    const remoteLabels = await state.remote.getLabels();
+    const lm = mergeLabels(state.labels, state.labelsAt, isLabelsDoc(remoteLabels) ? remoteLabels : null, new Date().toISOString());
+    state.labels = lm.labels;
+    state.labelsAt = lm.at;
+    writeJSON(KEYS.labelsAt, state.labelsAt);
     syncLabelsFromMemos();
     persistMemos();
     persistTombs();
     await Promise.all([
+      ...(lm.upload ? [state.remote.saveLabels({ labels: lm.labels, updatedAt: lm.at })] : []),
       ...r.toUpload.map((m) => state.remote.save(m)),
       ...r.toTomb.map((id) => state.remote.save({ id, deletedAt: r.tombstones[id] })),
     ]);
@@ -1789,6 +1818,7 @@ async function init() {
     state.labels = readJSON(KEYS.labels, null) ?? labels;
     state.memos = mergeMemos(cleanMemos(readJSON(KEYS.memos, [])), cleanMemos(seed));
     state.tombstones = readJSON(KEYS.deleted, {});
+    state.labelsAt = readJSON(KEYS.labelsAt, '');
     syncLabelsFromMemos();
     persistMemos(); // 레거시 메모를 새 모델로 저장
     try { state.lang = localStorage.getItem(KEYS.lang) || 'ko'; } catch { /* 기본값 */ }

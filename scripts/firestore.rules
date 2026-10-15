@@ -25,5 +25,14 @@ service cloud.firestore {
                             && (isMemo(request.resource.data) || isTombstone(request.resource.data));
       allow delete: if request.auth != null && request.auth.uid == uid;
     }
+
+    // 레이블 목록(빈 레이블 포함)은 users/{본인 uid}/meta/labels 한 문서로 기기 간 동기화한다.
+    match /users/{uid}/meta/labels {
+      allow read, delete: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+                            && request.resource.data.keys().hasOnly(['labels', 'updatedAt'])
+                            && request.resource.data.labels is list && request.resource.data.labels.size() <= 500
+                            && request.resource.data.updatedAt is string && request.resource.data.updatedAt.size() <= 40;
+    }
   }
 }

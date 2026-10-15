@@ -124,7 +124,7 @@ const MEMO_LIMITS = { id: 128, text: 20000, labels: 50, labelList: 500, label: 1
 
 const isIsoDate = (s) => typeof s === 'string' && s.length <= MEMO_LIMITS.date && !Number.isNaN(Date.parse(s));
 const isPassage = (p) => Number.isInteger(p.chapter) && p.chapter >= 1 && Array.isArray(p.verses)
-  && p.verses.length <= MEMO_LIMITS.verses && p.verses.every((n) => Number.isInteger(n) && n >= 1);
+  && p.verses.length >= 1 && p.verses.length <= MEMO_LIMITS.verses && p.verses.every((n) => Number.isInteger(n) && n >= 1);
 
 /** 메모로 쓸 수 없는 이유 (문제가 없으면 null). 순수 함수 */
 function memoProblem(m, hasBook) {
@@ -772,6 +772,7 @@ function searchChapter(query, { live = false } = {}) {
   if (!hits.length) {
     status.textContent = live ? '찾은 결과가 없습니다.' : ''; // 입력 중에는 팝업이 입력을 끊지 않도록 안내만
     if (live) return;
+    $('#notice-dialog-title').textContent = '검색 결과 없음';
     $('#notice-text').textContent = `이 장에서 "${state.find}"을(를) 찾을 수 없습니다.`;
     $('#notice-dialog').showModal();
     return;
@@ -807,7 +808,25 @@ function renderPassage() {
 function openVerseMemos(n) {
   const { bookId, ch } = state.chapter;
   const list = [...(memosByVerse(state.memos, bookId, ch).get(n) ?? [])].sort(byUpdatedDesc);
-  $('#verse-memos-title').textContent = `${formatRef(bookById(bookId), state.lang, ch, [n])} · 메모 ${list.length}개`;
+  showMemosDialog(formatRef(bookById(bookId), state.lang, ch, [n]), list);
+}
+
+/** 이 장에 연결된 메모 전체 팝업 (없으면 안내) */
+function openChapterMemos() {
+  const { bookId, ch } = state.chapter;
+  const ref = formatRef(bookById(bookId), state.lang, ch);
+  const list = [...new Set([...memosByVerse(state.memos, bookId, ch).values()].flat())].sort(byUpdatedDesc);
+  if (!list.length) {
+    $('#notice-dialog-title').textContent = '메모 없음';
+    $('#notice-text').replaceChildren(h('span', { lang: state.lang }, ref), '에 기록된 메모가 없습니다.'); // 책 이름만 해당 언어로 낭독
+    $('#notice-dialog').showModal();
+    return;
+  }
+  showMemosDialog(ref, list);
+}
+
+function showMemosDialog(ref, list) {
+  $('#verse-memos-title').replaceChildren(h('span', { lang: state.lang }, ref), ` · 메모 ${list.length}개`);
   mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo', 'data-id': m.id },
     h('p', { class: 'read__text' }, memoNodes(m)),
     h('div', { class: 'form__actions form__actions--start' },
@@ -1616,6 +1635,7 @@ const actions = {
     $('#memos-summary').scrollIntoView({ block: 'start' });
     $('#board').querySelector('a, button')?.focus({ preventScroll: true });
   },
+  'chapter-memos': () => openChapterMemos(),
   'verse-memos': (el) => openVerseMemos(Number(el.dataset.verse)),
   'memo-read': (el) => openReadDialog(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)),
   'memo-delete': (el) => { el.closest('dialog')?.close(); confirmDelete(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
@@ -1752,6 +1772,7 @@ document.addEventListener('submit', (e) => {
 
 document.addEventListener('input', (e) => {
   if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
+  else if (e.target.id === 'find-input') searchChapter(e.target.value, { live: true });
 });
 
 document.addEventListener('change', (e) => {

@@ -1630,13 +1630,18 @@ function renderLabelsDialog() {
 const jumpVisibility = (scrollY, maxY, threshold = 200) => ({
   top: scrollY > threshold,
   bottom: maxY > threshold && maxY - scrollY > threshold,
+  topDisabled: scrollY < 1, // 이미 맨 위/맨 아래이면 비활성 (스크린리더에는 '사용 불가'로 읽힘)
+  bottomDisabled: maxY - scrollY < 1,
 });
 const scrollBehavior = () => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
 
 function updateJumpButtons() {
   const vis = jumpVisibility(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
-  $('#jump-top').hidden = !vis.top;
-  $('#jump-bottom').hidden = !vis.bottom;
+  for (const [id, show, off] of [['#jump-top', vis.top, vis.topDisabled], ['#jump-bottom', vis.bottom, vis.bottomDisabled]]) {
+    const btn = $(id);
+    btn.classList.toggle('reader__jump-btn--idle', !show); // 화면에서만 숨김
+    btn.disabled = off;
+  }
 }
 
 const actions = {
@@ -1877,6 +1882,11 @@ readerView.addEventListener('touchend', (e) => {
   if (dir) location.hash = $(`#reader-${dir === 'prev' ? 'prev' : 'next'}`).getAttribute('href');
 });
 readerView.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
+
+// 선택 도구 모음 높이(줄바꿈·숨김으로 변함)를 CSS 변수로 알려 이동 버튼이 가려지지 않게 함
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty('--selection-bar-h', `${entry.target.offsetHeight}px`);
+}).observe($('#selection-bar'));
 
 window.addEventListener('scroll', updateJumpButtons, { passive: true });
 window.addEventListener('resize', updateJumpButtons);

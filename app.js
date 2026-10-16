@@ -813,6 +813,7 @@ function renderPassage() {
         h('span', { class: 'visually-hidden', lang: state.lang }, state.lang === 'en' ? `Verse ${v.n}. ` : `${v.n}절 `), // 포커스만 옮겨도 절 번호가 들리도록 버튼 이름에 포함
         verseTextNodes(v.text)));
   }));
+  updateJumpButtons(); // 본문 길이가 정해진 뒤 버튼 표시 여부 갱신
   const rangeEnd = $('#range-end');
   rangeEnd.lang = state.lang;
   mount(rangeEnd, verses.filter((v) => v.text).map((v) => h('option', { value: v.n }, state.lang === 'en' ? `To ${v.n}` : `${v.n}절까지`)));
@@ -1625,7 +1626,29 @@ function renderLabelsDialog() {
 }
 
 /* ================= 이벤트 (위임) ================= */
+/** 현재 스크롤 위치에서 맨 위/맨 아래 이동 버튼을 보여 줄지 (순수 함수) */
+const jumpVisibility = (scrollY, maxY, threshold = 200) => ({
+  top: scrollY > threshold,
+  bottom: maxY > threshold && maxY - scrollY > threshold,
+});
+const scrollBehavior = () => (window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth');
+
+function updateJumpButtons() {
+  const vis = jumpVisibility(window.scrollY, document.documentElement.scrollHeight - window.innerHeight);
+  $('#jump-top').hidden = !vis.top;
+  $('#jump-bottom').hidden = !vis.bottom;
+}
+
 const actions = {
+  'scroll-top': () => {
+    window.scrollTo({ top: 0, behavior: scrollBehavior() });
+    $('#reader-title').focus({ preventScroll: true }); // 스크린리더가 장 제목을 읽도록
+  },
+  'scroll-bottom': () => {
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: scrollBehavior() });
+    const last = [...document.querySelectorAll('#passage .verse__text')].pop();
+    last?.focus({ preventScroll: true }); // 마지막 절로 포커스
+  },
   'day-prev': () => { state.date = shiftISODate(state.date, -1); renderToday(); announceDay(); },
   'day-next': () => { state.date = shiftISODate(state.date, 1); renderToday(); announceDay(); },
   'day-today': () => { state.date = toISODate(); renderToday(); announceDay(); },
@@ -1854,6 +1877,9 @@ readerView.addEventListener('touchend', (e) => {
   if (dir) location.hash = $(`#reader-${dir === 'prev' ? 'prev' : 'next'}`).getAttribute('href');
 });
 readerView.addEventListener('touchcancel', () => { touchStart = null; }, { passive: true });
+
+window.addEventListener('scroll', updateJumpButtons, { passive: true });
+window.addEventListener('resize', updateJumpButtons);
 
 // 화면 전환 시 새 화면의 제목(h2)으로 포커스를 옮겨 스크린리더가 어디로 이동했는지 읽어 주도록 함
 window.addEventListener('hashchange', () => {

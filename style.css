@@ -178,6 +178,20 @@ textarea.field__control { width: 100%; resize: vertical; }
   padding: 10px 16px; background: var(--c-surface); border-top: 1px solid var(--c-border);
 }
 .selection-bar[hidden] { display: none; }
+
+/* 맨 위/맨 아래 이동 버튼: 오른쪽 아래 고정 (선택 도구 모음 위쪽) */
+.reader__jump {
+  position: fixed; right: 12px; bottom: 84px; z-index: 15;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.reader__jump-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--c-border); background: var(--c-surface); color: var(--c-primary);
+  font: inherit; font-size: 1.6rem; line-height: 1; cursor: pointer; opacity: .85;
+}
+.reader__jump-btn[hidden] { display: none; }
+.reader__jump-btn:hover { opacity: 1; background: var(--c-primary); color: var(--c-primary-text); }
 .selection-bar__info { margin-right: auto; font-weight: 600; }
 
 /* memos */

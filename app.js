@@ -433,6 +433,15 @@ function focusFirst(...selectors) {
   }
 }
 
+/** 레이블 관리 팝업의 경고: 모달 뒤에 가려지는 토스트 대신 팝업 안에 눈에 보이게 표시 (스크린리더용은 toast 가 상태 영역에 알림) */
+function warnLabel(msg) {
+  const notice = $('#labels-notice');
+  notice.textContent = msg;
+  notice.hidden = false;
+  toast(msg);
+  $('#label-input').focus();
+}
+
 let toastTimer;
 let toastFillTimer;
 let dialogStatusTimer;
@@ -1698,15 +1707,8 @@ const actions = {
   'label-delete': () => {
     const input = $('#label-input');
     const name = input.value.trim();
-    const warn = (msg) => { // 모달 뒤에 가려지는 토스트 대신 대화상자 안에 눈에 보이게 표시 (스크린리더용은 toast 가 상태 영역에 알림)
-      const notice = $('#labels-notice');
-      notice.textContent = msg;
-      notice.hidden = false;
-      toast(msg);
-      input.focus();
-    };
-    if (!name) return warn('삭제할 레이블 이름을 입력하세요.');
-    if (!state.labels.includes(name)) return warn(`"${name}" 레이블은 없습니다.`);
+    if (!name) return warnLabel('삭제할 레이블 이름을 입력하세요.');
+    if (!state.labels.includes(name)) return warnLabel(`"${name}" 레이블은 없습니다.`);
     $('#labels-notice').hidden = true;
     const used = state.memos.filter((m) => m.labels.includes(name)).length;
     if (!window.confirm(`레이블 "${name}"을(를) 삭제할까요?\n\n⚠ 경고: 해당 메모에서 레이블 삭제${used ? ` (메모 ${used}개)` : ''}\n이 작업은 되돌릴 수 없습니다.`)) { input.focus(); return; }
@@ -1765,13 +1767,15 @@ document.addEventListener('submit', (e) => {
     e.preventDefault();
     const input = $('#label-input');
     const name = input.value.trim();
-    if (name && !state.labels.includes(name)) {
+    if (name && state.labels.includes(name)) { warnLabel(`"${name}" 레이블은 이미 있습니다.`); input.select(); return; }
+    $('#labels-notice').hidden = true;
+    if (name) {
       state.labels.push(name);
       persistLabels();
       renderLabelsDialog();
       if (memoDialogOpen()) { syncDraftLabels(name); renderDraft(); } // 메모 작성 중이면 새 레이블을 바로 선택된 상태로 추가
       toast(`레이블 ${name} 추가`);
-    } else if (name) toast('이미 있는 레이블입니다.');
+    }
     input.value = '';
   } else if (e.target.id === 'label-rename-form') {
     e.preventDefault();
@@ -1802,6 +1806,7 @@ document.addEventListener('submit', (e) => {
 
 document.addEventListener('input', (e) => {
   if (e.target.id === 'search-input') { state.query = e.target.value; state.page = 1; renderMemos(); }
+  else if (e.target.id === 'label-input') $('#labels-notice').hidden = true; // 입력을 고치면 이전 경고는 지움
   else if (e.target.id === 'find-input') searchChapter(e.target.value, { live: true });
 });
 

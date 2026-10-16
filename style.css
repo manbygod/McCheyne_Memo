@@ -244,7 +244,7 @@ button.chip { cursor: pointer; color: inherit; }
 .form__add { border: 1px solid var(--c-border); border-radius: var(--radius); }
 .add-preview { margin: 0; padding: 8px 12px 10px; font-family: var(--font-read); color: var(--c-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .memo-passages { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.memo-passage { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 8px 10px; }
+.memo-passage { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; }
 .memo-passage__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .memo-passage__actions { display: flex; flex-direction: column; gap: 6px; }
 .memo-passage__actions .btn { width: 100%; }

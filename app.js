@@ -1752,6 +1752,8 @@ document.addEventListener('pointercancel', () => { dragging = null; });
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
   if (el) { actions[el.dataset.action]?.(el, e); return; }
+  const passage = e.target.closest('.memo-passage'); // 말씀 박스의 빈 곳을 눌러도 '보기'와 동일 (버튼·칩은 위에서 처리됨)
+  if (passage) { actions['passage-view'](passage.querySelector('[data-action="passage-view"]')); return; }
   const verse = e.target.closest('.verse');
   if (verse) toggleVerse(Number(verse.dataset.verse), e.shiftKey);
 });

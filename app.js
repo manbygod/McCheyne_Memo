@@ -1691,7 +1691,7 @@ const actions = {
     const form = $('#label-rename-form');
     const input = $('#label-rename-input');
     form.dataset.from = el.dataset.label;
-    $('#label-rename-caption').textContent = `레이블 ${el.dataset.label}의 새 이름`;
+    $('#label-rename-caption').textContent = `레이블 ${el.dataset.label}의 새 이름`; // 화면에는 숨기고 스크린리더용으로만 유지
     input.value = el.dataset.label;
     form.hidden = false;
     input.focus();
@@ -1705,19 +1705,16 @@ const actions = {
     input.focus();
   },
   'label-delete': () => {
-    const input = $('#label-input');
-    const name = input.value.trim();
-    if (!name) return warnLabel('삭제할 레이블 이름을 입력하세요.');
-    if (!state.labels.includes(name)) return warnLabel(`"${name}" 레이블은 없습니다.`);
+    const name = $('#label-rename-form').dataset.from; // 선택한 레이블을 삭제
+    if (!name || !state.labels.includes(name)) return;
     $('#labels-notice').hidden = true;
     const used = state.memos.filter((m) => m.labels.includes(name)).length;
-    if (!window.confirm(`레이블 "${name}"을(를) 삭제할까요?\n\n⚠ 경고: 해당 메모에서 레이블 삭제${used ? ` (메모 ${used}개)` : ''}\n이 작업은 되돌릴 수 없습니다.`)) { input.focus(); return; }
+    if (!window.confirm(`레이블 "${name}"을(를) 삭제할까요?\n\n⚠ 경고: 해당 메모에서 레이블 삭제${used ? ` (메모 ${used}개)` : ''}\n이 작업은 되돌릴 수 없습니다.`)) { $('#label-rename-input').focus(); return; }
     const count = removeLabelEverywhere(name);
     renderLabelsDialog();
     if (memoDialogOpen()) { syncDraftLabels(); state.draft.labels.delete(name); renderDraft(); }
     toast(`레이블 ${name} 삭제${count ? ` (메모 ${count}개에서 제거)` : ''}`);
-    input.value = '';
-    input.focus();
+    closeRenameForm(null); // 삭제한 레이블은 없으므로 목록 첫 레이블로 포커스
   },
 };
 

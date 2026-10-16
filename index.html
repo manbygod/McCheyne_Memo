@@ -229,16 +229,16 @@
       <label class="field__label" for="label-input">레이블</label>
       <input class="field__control" id="label-input" autocomplete="off" required maxlength="20">
       <button type="submit" class="btn btn--primary">추가</button>
-      <button type="button" class="btn" data-action="label-delete">삭제</button>
       <button type="button" class="btn" data-action="label-input-clear">취소</button>
     </form>
     <p class="dialog__notice" id="labels-notice" hidden></p>
     <p class="dialog__hint" id="labels-hint">레이블 선택 후 이름 변경</p>
     <ul class="chips" id="labels-list"></ul>
     <form class="form__row" id="label-rename-form" hidden>
-      <label class="field__label" for="label-rename-input" id="label-rename-caption">새 이름</label>
+      <label class="visually-hidden" for="label-rename-input" id="label-rename-caption">새 이름</label>
       <input class="field__control" id="label-rename-input" autocomplete="off" required maxlength="20">
       <button type="submit" class="btn btn--primary">이름 바꾸기</button>
+      <button type="button" class="btn" data-action="label-delete">삭제</button>
       <button type="button" class="btn" data-action="label-rename-cancel">취소</button>
     </form>
     <div class="form__actions">

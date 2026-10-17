@@ -948,10 +948,27 @@ function copySelection() {
 /* ================= 메모 작성 다이얼로그 ================= */
 const optionsOf = (values, labelOf = String) => values.map((v) => h('option', { value: v }, labelOf(v)));
 
-function fillBookSelect(lang, bookId, sel = $('#add-book')) {
+/** 하루치 읽기표 → [{bookId, chapter(첫 장)}] (책 중복 제거, 읽기표 순서 유지) */
+function todayBookChapters(day) {
+  const seen = new Map();
+  for (const r of day.flatMap((t) => [].concat(t ?? [])).map(normalizeReading)) {
+    if (!seen.has(r.book)) seen.set(r.book, r.chapter);
+  }
+  return [...seen].map(([bookId, chapter]) => ({ bookId, chapter }));
+}
+
+const todayPicks = () => todayBookChapters(state.plan.days[planKey(state.date, state.plan)] ?? [])
+  .filter((p) => bookById(p.bookId));
+
+function fillBookSelect(lang, bookId, sel = $('#add-book'), withToday = false) {
   const group = (label, tt) => h('optgroup', { label },
     state.books.filter((b) => b.testament === tt).map((b) => h('option', { value: b.id }, bookName(b, lang))));
-  mount(sel, group(lang === 'en' ? 'Old Testament' : '구약', 'OT'), group(lang === 'en' ? 'New Testament' : '신약', 'NT'));
+  const picks = withToday ? todayPicks() : [];
+  const today = picks.length
+    ? [h('optgroup', { label: lang === 'en' ? "Today's reading" : '오늘 읽기' },
+      picks.map((p) => h('option', { value: p.bookId }, bookName(bookById(p.bookId), lang))))]
+    : [];
+  mount(sel, ...today, group(lang === 'en' ? 'Old Testament' : '구약', 'OT'), group(lang === 'en' ? 'New Testament' : '신약', 'NT'));
   sel.value = bookId;
 }
 
@@ -994,7 +1011,7 @@ function openMemoDialog(draft) {
   const last = draft.passages.at(-1);
   $('#memo-dialog-title').textContent = draft.id ? '메모 수정' : '메모 작성';
   $('#memo-content').value = draft.content;
-  fillBookSelect(draft.lang, last.bookId);
+  fillBookSelect(draft.lang, last.bookId, $('#add-book'), true);
   syncPicker({ chapter: last.chapter, verse: Math.min(...last.verses) });
   renderDraft();
   moveDialog($('#memo-dialog'), 0, 0);
@@ -1855,7 +1872,7 @@ document.addEventListener('change', (e) => {
   } else if (e.target.id === 'range-end') {
     applyRangeEnd(Number(e.target.value));
   } else if (e.target.id === 'add-book') {
-    syncPicker({ chapter: 1 });
+    syncPicker({ chapter: todayPicks().find((p) => p.bookId === e.target.value)?.chapter ?? 1 });
   } else if (e.target.id === 'add-chapter') {
     syncPicker({ chapter: Number(e.target.value) });
   } else if (e.target.id === 'add-verse') {

@@ -240,9 +240,13 @@ button.chip { cursor: pointer; color: inherit; }
 /* dialog */
 .dialog {
   width: min(560px, calc(100vw - 24px)); max-height: 92vh; overflow: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--c-border); border-radius: var(--radius);
   background: var(--c-surface); color: var(--c-text); padding: 16px;
 }
+@supports (height: 1dvh) { .dialog { max-height: 92dvh; } }
+/* 키보드가 올라와 보이는 영역이 줄면(app.js가 --vv-h 설정) 팝업을 그 안에 맞춤 */
+.dialog[open][data-vv] { max-height: calc(var(--vv-h) - 16px); margin-top: calc(var(--vv-top) + 8px); margin-bottom: 0; }
 .dialog::backdrop { background: rgb(0 0 0 / .45); }
 /* 팝업을 열 때 내용 영역으로 옮겨진 포커스(스크린리더가 내용을 읽도록)는 상자로 표시하지 않음. 버튼·링크의 포커스 링은 유지 */
 .read__text:focus-visible, .dialog__body:focus-visible { outline: none; }

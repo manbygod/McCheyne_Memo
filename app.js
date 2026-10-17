@@ -1014,6 +1014,7 @@ function openMemoDialog(draft) {
   fillBookSelect(draft.lang, last.bookId, $('#add-book'), true);
   syncPicker({ chapter: last.chapter, verse: Math.min(...last.verses) });
   renderDraft();
+  delete $('#memo-dialog').dataset.vv;
   moveDialog($('#memo-dialog'), 0, 0);
   $('#memo-dialog').showModal();
   $('#memo-content').focus();
@@ -1762,6 +1763,26 @@ const actions = {
     closeRenameForm(null); // 삭제한 레이블은 없으므로 목록 첫 레이블로 포커스
   },
 };
+
+/* ---- iOS: 키보드가 뜨면 보이는 영역(visualViewport)만 줄고 레이아웃은 그대로라, 팝업 안 입력 커서가 글자와 어긋남.
+   팝업을 보이는 영역 안에 맞추고, 페이지가 밀린 스크롤을 되돌린다 ---- */
+function fitDialogToViewport() {
+  const vv = window.visualViewport;
+  const dialog = document.querySelector('dialog[open]');
+  if (!vv || !dialog) return;
+  const keyboard = window.innerHeight - vv.height > 80;
+  if (keyboard) {
+    dialog.dataset.vv = '';
+    dialog.style.setProperty('--vv-h', `${vv.height}px`);
+    dialog.style.setProperty('--vv-top', `${vv.offsetTop}px`);
+  } else {
+    delete dialog.dataset.vv;
+  }
+  const field = document.activeElement;
+  if (keyboard && field?.matches('textarea, input')) field.scrollIntoView({ block: 'nearest' });
+}
+window.visualViewport?.addEventListener('resize', fitDialogToViewport);
+window.visualViewport?.addEventListener('scroll', fitDialogToViewport);
 
 /* ---- 팝업 제목을 끌어 위치 이동 (화면 밖으로 나가지 않게 제한) ---- */
 const clamp = (v, min, max) => Math.min(Math.max(v, min), Math.max(min, max));

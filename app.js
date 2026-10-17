@@ -1766,11 +1766,14 @@ const actions = {
 
 /* ---- iOS: 키보드가 뜨면 보이는 영역(visualViewport)만 줄고 레이아웃은 그대로라, 팝업 안 입력 커서가 글자와 어긋남.
    팝업을 보이는 영역 안에 맞추고, 페이지가 밀린 스크롤을 되돌린다 ---- */
+let vvBase = 0; // 키보드가 없을 때의 높이. 홈 화면 앱(standalone)은 innerHeight도 줄어들 수 있어 최댓값을 기준으로 삼음
+window.addEventListener('orientationchange', () => { vvBase = 0; });
 function fitDialogToViewport() {
   const vv = window.visualViewport;
   const dialog = document.querySelector('dialog[open]');
   if (!vv || !dialog) return;
-  const keyboard = window.innerHeight - vv.height > 80;
+  vvBase = Math.max(vvBase, window.innerHeight, vv.height);
+  const keyboard = vvBase - vv.height > 80;
   if (keyboard) {
     dialog.dataset.vv = '';
     dialog.style.setProperty('--vv-h', `${vv.height}px`);

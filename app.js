@@ -1017,7 +1017,9 @@ function openMemoDialog(draft) {
   delete $('#memo-dialog').dataset.vv;
   moveDialog($('#memo-dialog'), 0, 0);
   $('#memo-dialog').showModal();
+  revealMemoField = true;
   $('#memo-content').focus();
+  $('#memo-content').scrollIntoView({ block: 'start' });
 }
 
 const draftRef = (d, p) => formatRef(bookById(p.bookId), d.lang, p.chapter, [...p.verses]);
@@ -1772,6 +1774,7 @@ window.addEventListener('orientationchange', () => { vvBase = 0; });
    (1) 값이 실제로 바뀔 때만 쓰고 (2) 프레임당 한 번만 실행하며 (3) 필드가 가려졌을 때만 스크롤한다 */
 let vvFrame = 0;
 let vvKey = '';
+let revealMemoField = false; // 메모 팝업이 열린 직후, 키보드가 뜨면 메모 입력란으로 스크롤
 let composing = false; // 한글 등 조합(IME) 입력 중에는 레이아웃을 건드리지 않고 조합이 끝난 뒤 반영
 document.addEventListener('compositionstart', () => { composing = true; }, true);
 document.addEventListener('compositionend', () => { composing = false; fitDialogToViewport(); }, true);
@@ -1797,7 +1800,10 @@ function fitDialogToViewport() {
       }
     }
     const field = document.activeElement;
-    if (keyboard && field?.matches('textarea, input')) {
+    if (keyboard && revealMemoField && field?.id === 'memo-content') { // 팝업을 막 열었을 때: 메모 입력란이 맨 위에 보이도록
+      revealMemoField = false;
+      $('#memo-content').scrollIntoView({ block: 'start' });
+    } else if (keyboard && field?.matches('textarea, input')) {
       const r = field.getBoundingClientRect();
       if (r.top < vv.offsetTop || r.bottom > vv.offsetTop + vv.height) field.scrollIntoView({ block: 'nearest' });
     }

@@ -1814,9 +1814,9 @@ function fitDialogToViewport() {
       }
     }
     const field = document.activeElement;
-    if (keyboard && revealMemoField && field?.id === 'memo-content') { // 팝업을 막 열었을 때: 메모 입력란이 맨 위에 보이도록
+    if (keyboard && revealMemoField && field?.id === 'memo-content') { // 팝업을 막 열었을 때: "메모" 라벨부터 보이도록 (입력란은 그 바로 아래)
       revealMemoField = false;
-      $('#memo-content').scrollIntoView({ block: 'start' });
+      (document.querySelector('label[for="memo-content"]') || field).scrollIntoView({ block: 'start' });
     } else if (keyboard && field?.matches('textarea, input')) {
       const r = field.getBoundingClientRect();
       if (r.top < vv.offsetTop || r.bottom > vv.offsetTop + vv.height) field.scrollIntoView({ block: 'nearest' });

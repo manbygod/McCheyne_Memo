@@ -1768,24 +1768,43 @@ const actions = {
    팝업을 보이는 영역 안에 맞추고, 페이지가 밀린 스크롤을 되돌린다 ---- */
 let vvBase = 0; // 키보드가 없을 때의 높이. 홈 화면 앱(standalone)은 innerHeight도 줄어들 수 있어 최댓값을 기준으로 삼음
 window.addEventListener('orientationchange', () => { vvBase = 0; });
+/* 한글 조합 중에 레이아웃을 바꾸면 iOS가 커서 위치를 갱신하지 못해 어긋나므로,
+   (1) 값이 실제로 바뀔 때만 쓰고 (2) 프레임당 한 번만 실행하며 (3) 필드가 가려졌을 때만 스크롤한다 */
+let vvFrame = 0;
+let vvKey = '';
 function fitDialogToViewport() {
-  const vv = window.visualViewport;
-  const dialog = document.querySelector('dialog[open]');
-  if (!vv || !dialog) return;
-  vvBase = Math.max(vvBase, window.innerHeight, vv.height);
-  const keyboard = vvBase - vv.height > 80;
-  if (keyboard) {
-    dialog.dataset.vv = '';
-    dialog.style.setProperty('--vv-h', `${vv.height}px`);
-    dialog.style.setProperty('--vv-top', `${vv.offsetTop}px`);
-  } else {
-    delete dialog.dataset.vv;
-  }
-  const field = document.activeElement;
-  if (keyboard && field?.matches('textarea, input')) field.scrollIntoView({ block: 'nearest' });
+  if (vvFrame) return;
+  vvFrame = requestAnimationFrame(() => {
+    vvFrame = 0;
+    const vv = window.visualViewport;
+    const dialog = document.querySelector('dialog[open]');
+    if (!vv || !dialog) { vvKey = ''; return; }
+    vvBase = Math.max(vvBase, window.innerHeight, vv.height);
+    const keyboard = vvBase - vv.height > 80;
+    const key = keyboard ? `${Math.round(vv.height)}|${Math.round(vv.offsetTop)}` : '';
+    if (key !== vvKey) {
+      vvKey = key;
+      if (keyboard) {
+        dialog.dataset.vv = '';
+        dialog.style.setProperty('--vv-h', `${Math.round(vv.height)}px`);
+        dialog.style.setProperty('--vv-top', `${Math.round(vv.offsetTop)}px`);
+      } else {
+        delete dialog.dataset.vv;
+      }
+    }
+    const field = document.activeElement;
+    if (keyboard && field?.matches('textarea, input')) {
+      const r = field.getBoundingClientRect();
+      if (r.top < vv.offsetTop || r.bottom > vv.offsetTop + vv.height) field.scrollIntoView({ block: 'nearest' });
+    }
+  });
 }
 window.visualViewport?.addEventListener('resize', fitDialogToViewport);
 window.visualViewport?.addEventListener('scroll', fitDialogToViewport);
+/* 입력창에 포커스가 가면 키보드 애니메이션 이벤트를 놓치더라도 한 번 맞춤 */
+document.addEventListener('focusin', (e) => {
+  if (e.target.matches?.('dialog textarea, dialog input')) fitDialogToViewport();
+});
 
 /* ---- 팝업 제목을 끌어 위치 이동 (화면 밖으로 나가지 않게 제한) ---- */
 const clamp = (v, min, max) => Math.min(Math.max(v, min), Math.max(min, max));

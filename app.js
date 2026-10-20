@@ -1772,10 +1772,14 @@ window.addEventListener('orientationchange', () => { vvBase = 0; });
    (1) 값이 실제로 바뀔 때만 쓰고 (2) 프레임당 한 번만 실행하며 (3) 필드가 가려졌을 때만 스크롤한다 */
 let vvFrame = 0;
 let vvKey = '';
+let composing = false; // 한글 등 조합(IME) 입력 중에는 레이아웃을 건드리지 않고 조합이 끝난 뒤 반영
+document.addEventListener('compositionstart', () => { composing = true; }, true);
+document.addEventListener('compositionend', () => { composing = false; fitDialogToViewport(); }, true);
 function fitDialogToViewport() {
   if (vvFrame) return;
   vvFrame = requestAnimationFrame(() => {
     vvFrame = 0;
+    if (composing) return;
     const vv = window.visualViewport;
     const dialog = document.querySelector('dialog[open]');
     if (!vv || !dialog) { vvKey = ''; return; }

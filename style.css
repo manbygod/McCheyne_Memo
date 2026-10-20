@@ -127,6 +127,13 @@ a { color: var(--c-primary); }
   max-width: 100%;
 }
 textarea.field__control { width: 100%; resize: vertical; }
+/* 파일철 탭처럼: 라벨이 입력란 위쪽 모서리에 붙은 탭으로 보임 */
+.field__label--tab {
+  display: block; width: fit-content; align-self: flex-start; margin: 6px 0 -1px 0; padding: 3px 14px 2px;
+  border: 1px solid var(--c-border); border-bottom-color: var(--c-surface); border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--c-surface); color: var(--c-text); font-weight: 600; position: relative; z-index: 1;
+}
+.field__control--tabbed { border-top-left-radius: 0; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center;

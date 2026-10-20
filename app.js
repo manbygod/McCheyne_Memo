@@ -1777,7 +1777,21 @@ let vvKey = '';
 let revealMemoField = false; // 메모 팝업이 열린 직후, 키보드가 뜨면 메모 입력란으로 스크롤
 let composing = false; // 한글 등 조합(IME) 입력 중에는 레이아웃을 건드리지 않고 조합이 끝난 뒤 반영
 document.addEventListener('compositionstart', () => { composing = true; }, true);
-document.addEventListener('compositionend', () => { composing = false; fitDialogToViewport(); }, true);
+document.addEventListener('compositionend', () => { composing = false; fitDialogToViewport(); settleCaret(); }, true);
+/* 팝업 맞춤·스크롤로 레이아웃이 바뀐 뒤 iOS가 네이티브 커서 위치를 갱신하지 않는 경우가 있어,
+   키보드 애니메이션이 끝난 뒤(조합 중이 아닐 때) 선택 범위를 다시 지정해 커서를 글자 위치로 다시 그리게 한다 */
+let caretTimer = 0;
+function settleCaret() {
+  clearTimeout(caretTimer);
+  caretTimer = setTimeout(() => {
+    const field = document.activeElement;
+    if (composing || !field?.matches?.('dialog textarea, dialog input[type="text"], dialog input:not([type])')) return;
+    const { selectionStart: s, selectionEnd: e, selectionDirection: d } = field;
+    if (s == null) return;
+    field.setSelectionRange(0, 0);
+    field.setSelectionRange(s, e, d);
+  }, 400);
+}
 function fitDialogToViewport() {
   if (vvFrame) return;
   vvFrame = requestAnimationFrame(() => {
@@ -1807,6 +1821,7 @@ function fitDialogToViewport() {
       const r = field.getBoundingClientRect();
       if (r.top < vv.offsetTop || r.bottom > vv.offsetTop + vv.height) field.scrollIntoView({ block: 'nearest' });
     }
+    settleCaret();
   });
 }
 window.visualViewport?.addEventListener('resize', fitDialogToViewport);

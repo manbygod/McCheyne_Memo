@@ -1790,6 +1790,8 @@ function settleCaret() {
     if (s == null) return;
     field.setSelectionRange(0, 0);
     field.setSelectionRange(s, e, d);
+    field.style.transform = 'translateZ(0)'; // 선택 범위 재지정만으로 안 그려질 때를 대비해 입력란 레이어를 한 번 다시 그림
+    requestAnimationFrame(() => { field.style.transform = ''; });
   }, 400);
 }
 function fitDialogToViewport() {

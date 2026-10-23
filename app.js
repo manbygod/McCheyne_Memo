@@ -6,6 +6,7 @@ const KEYS = { memos: 'mccheyne.memos.v1', labels: 'mccheyne.labels.v1', lang: '
 const BIBLE_FILE = (lang, id) => `data/bible/${lang}/${id}.json`;
 const CREDITS = {
   ko: '성경전서 개역한글판 (대한성서공회, 1961)',
+  'ko-nkrv': '성경전서 개역개정판 (대한성서공회) — 이 기기에 가져온 본문',
   en: 'Berean Standard Bible (BSB, Public Domain)',
 };
 
@@ -395,10 +396,43 @@ function meditationToShareText(memos, iso, passageRef) {
 
 const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
 
+/** 언어 선택값('ko' | 'ko-nkrv' | 'en') → {lang, koVersion}. 가져온 개역개정이 없으면 개역한글로 되돌린다 */
+function parseLangChoice(value, hasNkrv) {
+  if (value === 'en') return { lang: 'en', koVersion: 'krv' };
+  return { lang: 'ko', koVersion: value === 'ko-nkrv' && hasNkrv ? 'nkrv' : 'krv' };
+}
+
+/** 가져온 단일 파일 {책ID: {장: [절…]}} 을 책 ID 기준으로 나눔 (순수 함수). 책이 아닌 키는 unknown 으로 모은다 */
+function splitBibleFile(data, isBook) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: '{"gen": {"1": [절 본문…]}, "exo": {…}} 형태의 객체가 아닙니다.' };
+  const books = [];
+  const unknown = [];
+  for (const [key, value] of Object.entries(data)) {
+    const id = key.toLowerCase();
+    if (isBook(id)) books.push([id, value]); else unknown.push(key);
+  }
+  return { books, unknown };
+}
+
+/** 가져온 한 권의 본문 검사. 올바르면 {chapters}(복사본), 아니면 {error} — 장 수는 읽기표 책 정보와 같아야 하고 장마다 비어 있지 않은 절 배열 */
+function validateBookText(data, book) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return { error: '{"1": [절 본문…]} 형태의 객체가 아닙니다.' };
+  const keys = Object.keys(data);
+  if (keys.length !== book.chapters) return { error: `장 수가 ${keys.length}개입니다. ${book.ko}은(는) ${book.chapters}장이어야 합니다.` };
+  const chapters = {};
+  for (let c = 1; c <= book.chapters; c++) {
+    const verses = data[c];
+    if (!Array.isArray(verses) || !verses.length || verses.length > 200) return { error: `${c}장의 절 목록이 올바르지 않습니다.` };
+    if (verses.some((t) => typeof t !== 'string' || t.length > 5000)) return { error: `${c}장에 문자열이 아니거나 너무 긴 절이 있습니다.` };
+    chapters[c] = verses.slice();
+  }
+  return { chapters };
+}
+
 /* ================= 상태 ================= */
 const state = {
   books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null,
-  lang: 'ko', date: toISODate(), query: '', page: 1,
+  lang: 'ko', koVersion: 'krv', nkrvBooks: new Set(), date: toISODate(), query: '', page: 1,
   origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
   chapter: null, // {bookId, ch, verses:[{n,text}]}
@@ -635,10 +669,39 @@ function mergeMemos(a, b) {
 /* ================= 본문 로딩 ================= */
 const bibleCache = new Map(); // `${lang}.${bookId}` → {장: [절 본문]}
 
+/* 개역개정: 사용자가 가져온 파일을 이 브라우저의 IndexedDB 에만 보관한다 (저장소·서버로 보내지 않음) */
+const NKRV_DB = { name: 'mccheyne.bible', store: 'nkrv' };
+function nkrvOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(NKRV_DB.name, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(NKRV_DB.store);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function nkrvTx(mode, run) {
+  const db = await nkrvOpen();
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(NKRV_DB.store, mode);
+      const req = run(tx.objectStore(NKRV_DB.store));
+      tx.oncomplete = () => resolve(req?.result);
+      tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+  } finally { db.close(); }
+}
+const nkrvKeys = () => nkrvTx('readonly', (st) => st.getAllKeys()).catch(() => []);
+const nkrvGet = (bookId) => nkrvTx('readonly', (st) => st.get(bookId));
+const nkrvPut = (bookId, chapters) => nkrvTx('readwrite', (st) => st.put(chapters, bookId));
+const nkrvClear = () => nkrvTx('readwrite', (st) => st.clear());
+
 /** → [{n, text}] — text 가 빈 절(사본에 없는 절)은 번호만 유지. 파일이 없으면 null */
 async function loadChapter(bookId, ch, lang) {
-  const key = `${lang}.${bookId}`;
-  if (!bibleCache.has(key)) bibleCache.set(key, await fetchJSON(BIBLE_FILE(lang, bookId), true));
+  const version = lang === 'ko' && state.koVersion === 'nkrv' ? 'ko-nkrv' : lang;
+  const key = `${version}.${bookId}`;
+  if (!bibleCache.has(key)) {
+    bibleCache.set(key, version === 'ko-nkrv' ? await nkrvGet(bookId) ?? null : await fetchJSON(BIBLE_FILE(lang, bookId), true));
+  }
   const verses = bibleCache.get(key)?.[ch];
   return verses ? verses.map((text, i) => ({ n: i + 1, text })) : null;
 }
@@ -704,6 +767,57 @@ function renderBible() {
   if (!b.bookId) b.bookId = state.books[0].id;
   fillBookSelect(state.lang, b.bookId, $('#bible-book'));
   fillChapterSelect(b.bookId, b.ch);
+  renderNkrvStatus();
+}
+
+/** 가져온 개역개정 상태를 화면에 반영: 상태 문구, 삭제 버튼, 언어 선택지 */
+function renderNkrvStatus(extra = '') {
+  const n = state.nkrvBooks.size;
+  const missing = state.books.filter((b) => !state.nkrvBooks.has(b.id));
+  $('#nkrv-status').textContent = (n
+    ? `가져온 개역개정: ${state.books.length}권 중 ${n}권.${missing.length > 10 ? ` 아직 없는 책 ${missing.length}권.` : missing.length ? ` 아직 없는 책: ${missing.map((b) => b.ko).join(', ')}.` : ''}`
+    : '아직 가져온 개역개정 본문이 없습니다.') + (extra ? ` ${extra}` : '');
+  $('#nkrv-remove').hidden = !n;
+  const opt = $('#lang-select option[value="ko-nkrv"]');
+  opt.hidden = opt.disabled = !n;
+}
+
+const langChoice = () => (state.lang === 'en' ? 'en' : state.koVersion === 'nkrv' ? 'ko-nkrv' : 'ko');
+
+/** 선택한 단일 파일을 책별로 검사해 통과한 책만 저장. 결과는 가져오기 결과 대화상자로 알린다 */
+async function importNkrvFile(file) {
+  const fail = (text) => showImportResult('가져오지 못했습니다.', [{ text, warn: true }], '개역개정 가져오기 결과');
+  if (file.size > 15e6) { fail(`${file.name}: 파일이 너무 큽니다.`); return; }
+  let data;
+  try { data = JSON.parse(await file.text()); } catch { fail(`${file.name}: JSON 형식이 올바르지 않아 읽을 수 없습니다.`); return; }
+  const parts = splitBibleFile(data, (x) => !!bookById(x));
+  if (parts.error) { fail(`${file.name}: ${parts.error}`); return; }
+  const rows = [];
+  let saved = 0;
+  for (const [id, value] of parts.books) {
+    const book = bookById(id);
+    const r = validateBookText(value, book);
+    if (r.error) { rows.push({ text: `${book.ko}: ${r.error}`, warn: true }); continue; }
+    try { await nkrvPut(id, r.chapters); } catch { rows.push({ text: `${book.ko}: 브라우저 저장소에 저장하지 못해 건너뜀`, warn: true }); continue; }
+    bibleCache.delete(`ko-nkrv.${id}`);
+    state.nkrvBooks.add(id);
+    saved++;
+  }
+  if (parts.unknown.length) rows.push({ text: `책 ID가 아닌 항목 ${parts.unknown.length}개는 건너뜀: ${parts.unknown.slice(0, 5).join(', ')}${parts.unknown.length > 5 ? ' 등' : ''}`, warn: true });
+  renderNkrvStatus();
+  showImportResult(saved ? `${parts.books.length}권 중 ${saved}권을 가져왔습니다.` : '가져오지 못했습니다.', rows, '개역개정 가져오기 결과');
+}
+
+async function removeNkrv() {
+  if (!window.confirm('이 기기에 가져온 개역개정 본문을 모두 삭제할까요?\n(메모와 개역한글 본문은 그대로입니다.)')) return;
+  try { await nkrvClear(); } catch { toast('삭제하지 못했습니다.'); return; }
+  state.nkrvBooks.clear();
+  for (const k of [...bibleCache.keys()]) if (k.startsWith('ko-nkrv.')) bibleCache.delete(k);
+  Object.assign(state, parseLangChoice('ko', false));
+  try { localStorage.setItem(KEYS.lang, langChoice()); } catch { /* 무시 */ }
+  $('#lang-select').value = langChoice();
+  renderNkrvStatus('모두 삭제했습니다. 한국어는 개역한글로 표시됩니다.');
+  $('#bible-title').focus();
 }
 
 /* ================= 본문 보기/구절 선택 ================= */
@@ -739,11 +853,13 @@ async function renderReader(bookId, ch, verse = null) {
   if (parseRoute().name !== 'reader') return;
   if (!verses) {
     state.chapter = null;
-    mount($('#passage'), h('p', { role: 'alert' }, `본문(${BIBLE_FILE(state.lang, bookId)})을 불러오지 못했습니다. file:// 이 아닌 로컬 서버(README 참고)로 실행 중인지 확인하세요.`));
+    mount($('#passage'), h('p', { role: 'alert' }, state.lang === 'ko' && state.koVersion === 'nkrv'
+      ? `${book.ko}은(는) 가져온 개역개정에 없습니다. 성경 화면에서 개역개정 파일을 가져오거나, 상단 언어를 개역한글로 바꾸세요.`
+      : `본문(${BIBLE_FILE(state.lang, bookId)})을 불러오지 못했습니다. file:// 이 아닌 로컬 서버(README 참고)로 실행 중인지 확인하세요.`));
     return;
   }
   state.chapter = { bookId, ch, verses };
-  $('#reader-note').textContent = CREDITS[state.lang];
+  $('#reader-note').textContent = CREDITS[state.lang === 'ko' && state.koVersion === 'nkrv' ? 'ko-nkrv' : state.lang];
   renderPassage();
   if (verse) { // 메모의 본문 버튼으로 왔을 때: 첫 구절로 스크롤하고 포커스
     const btn = document.querySelector(`.verse[data-verse="${verse}"] .verse__text`);
@@ -1594,9 +1710,11 @@ function closeRenameForm(focusLabel) {
 }
 
 /** 가져오기 결과 대화상자: 줄 목록을 보여 준다 (warn 줄은 강조, sub 는 하위 항목) */
-function showImportResult(summary, rows) {
+function showImportResult(summary, rows, title = '메모 가져오기 결과') {
+  $('#import-title').textContent = title;
   $('#import-summary').textContent = summary;
   mount($('#import-list'), rows.map((r) => h('li', { class: r.warn ? 'result-list__item--warn' : null, id: r.id },
+    r.warn && h('span', { class: 'visually-hidden' }, '주의: '), // 색만으로 구분하지 않도록 낭독용 문구 추가
     r.text,
     r.sub?.length > 0 && h('ul', { class: 'result-list__sub' }, r.sub.map((t) => h('li', {}, t))))));
   $('#import-dialog').showModal();
@@ -1702,6 +1820,8 @@ const actions = {
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
   'memos-import': () => $('#import-file').click(),
+  'nkrv-import': () => $('#nkrv-file').click(),
+  'nkrv-remove': removeNkrv,
   'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
@@ -1929,9 +2049,13 @@ document.addEventListener('change', (e) => {
     const [file] = e.target.files;
     e.target.value = '';
     if (file) importMemosFile(file);
+  } else if (e.target.id === 'nkrv-file') {
+    const [file] = e.target.files;
+    e.target.value = '';
+    if (file) importNkrvFile(file);
   } else if (e.target.id === 'lang-select') {
-    state.lang = e.target.value;
-    try { localStorage.setItem(KEYS.lang, state.lang); } catch { /* 무시 */ }
+    Object.assign(state, parseLangChoice(e.target.value, state.nkrvBooks.size > 0));
+    try { localStorage.setItem(KEYS.lang, langChoice()); } catch { /* 무시 */ }
     document.documentElement.lang = 'ko';
     route();
   } else if (e.target.id === 'bible-book') {
@@ -1999,8 +2123,12 @@ async function init() {
     state.labelsAt = readJSON(KEYS.labelsAt, '');
     syncLabelsFromMemos();
     persistMemos(); // 레거시 메모를 새 모델로 저장
-    try { state.lang = localStorage.getItem(KEYS.lang) || 'ko'; } catch { /* 기본값 */ }
-    $('#lang-select').value = state.lang;
+    state.nkrvBooks = new Set(await nkrvKeys());
+    let saved = 'ko';
+    try { saved = localStorage.getItem(KEYS.lang) || 'ko'; } catch { /* 기본값 */ }
+    Object.assign(state, parseLangChoice(saved, state.nkrvBooks.size > 0));
+    renderNkrvStatus();
+    $('#lang-select').value = langChoice();
 
     if (fbCfg?.projectId) initFirebase(fbCfg).catch(() => toast('Firebase 연결 실패 - 로컬 모드로 동작합니다.')); // 화면 표시를 막지 않음
   } catch {

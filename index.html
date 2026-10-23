@@ -27,6 +27,7 @@
       <label class="field__label" for="lang-select">언어</label>
       <select class="field__control" id="lang-select" aria-label="성경 언어 선택">
         <option value="ko">한국어 (개역한글)</option>
+        <option value="ko-nkrv" hidden disabled>한국어 (개역개정, 이 기기)</option>
         <option value="en">English (BSB)</option>
       </select>
     </div>
@@ -68,6 +69,19 @@
         <select class="field__control" id="bible-chapter"></select>
         <button type="submit" class="btn btn--primary">읽기</button>
       </form>
+
+      <section class="nkrv" aria-labelledby="nkrv-title">
+        <h3 class="nkrv__title" id="nkrv-title">개역개정 본문 가져오기</h3>
+        <p class="view__note">개역개정은 저작권 보호 대상이라 앱에 포함하지 않았습니다. 가지고 계신 본문 파일을 이 기기로 가져오면, 상단 언어에서 "한국어 (개역개정, 이 기기)"를 고를 수 있습니다. 가져온 본문은 이 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
+        <p class="view__note">파일은 66권 전체(또는 일부)를 담은 JSON 한 파일입니다. 내용은 책 ID(예: gen, mat)별로 {"gen": {"1": ["1절 본문", "2절 본문"], "2": [...]}, "exo": {...}} 형태입니다. 다시 가져오면 들어 있는 책만 덮어씁니다.</p>
+        <div class="nkrv__actions">
+          <button type="button" class="btn" data-action="nkrv-import" aria-describedby="nkrv-status">개역개정 파일 가져오기</button>
+          <button type="button" class="btn btn--danger" id="nkrv-remove" data-action="nkrv-remove" aria-describedby="nkrv-status" hidden>가져온 개역개정 삭제</button>
+          <label class="visually-hidden" for="nkrv-file">가져올 개역개정 JSON 파일 (66권을 담은 파일 하나)</label>
+          <input type="file" id="nkrv-file" accept="application/json,.json" hidden>
+        </div>
+        <p class="view__note" id="nkrv-status" aria-live="polite"></p>
+      </section>
     </section>
 
     <!-- 본문 -->

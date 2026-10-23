@@ -863,6 +863,7 @@ async function renderReader(bookId, ch, verse = null) {
   $('#reader-next').setAttribute('aria-label', ch < book.chapters ? `다음 장, ${chapterName(ch + 1)}` : '다음, 읽던 목록으로');
   $('#reader-arrow-prev').href = prev;
   $('#reader-arrow-next').href = next;
+  $('#passage').removeAttribute('lang'); // 안내 문구(한국어)가 이전 장의 영어 음성으로 읽히지 않도록
   mount($('#passage'), h('p', {}, '불러오는 중...'));
 
   let verses = null;
@@ -934,6 +935,7 @@ function searchChapter(query, { live = false } = {}) {
 function renderPassage() {
   const { bookId, ch, verses } = state.chapter;
   const linked = memosByVerse(state.memos, bookId, ch);
+  $('#passage').lang = state.lang; // 영어 본문은 영어 음성으로 낭독되고, 영어 전용 단어 간격(style.css)이 적용됨
   mount($('#passage'), verses.filter((v) => v.text).map((v) => {
     const count = linked.get(v.n)?.length ?? 0;
     const on = state.selected.has(v.n);

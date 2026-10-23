@@ -159,6 +159,8 @@ textarea.field__control { width: 100%; resize: vertical; }
 .reader__find .field__control { flex: 1 1 140px; min-width: 0; }
 .verse__mark { background: var(--c-mark); color: inherit; border-radius: 2px; padding: 0 1px; box-shadow: 0 0 0 1px var(--c-mark-line); }
 .reader__arrow { display: none; } /* 넓은 화면에서만 표시 (아래 미디어쿼리) */
+/* Literata 는 본문 크기에서 단어 사이가 좁아 영어 본문만 조금 넓힘 */
+.passage:lang(en), .memo-card__verse:lang(en), .passage-view__verse:lang(en), .read__text :lang(en) { word-spacing: .15em; }
 .passage { font-family: var(--font-read); font-size: 1.125rem; line-height: 1.95; margin: 16px 0; }
 .verse { display: flex; align-items: baseline; gap: 8px; border-radius: 4px; padding: 2px 6px; cursor: pointer; }
 .verse__num { flex: none; min-width: 2em; text-align: right; font: .75rem var(--font); color: var(--c-muted); }

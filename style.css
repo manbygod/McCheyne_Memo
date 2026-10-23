@@ -146,9 +146,9 @@ textarea.field__control { width: 100%; resize: vertical; }
 .reading-list__empty { color: var(--c-muted); }
 
 /* bible */
-.nkrv { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--c-border); }
-.nkrv__title { margin: 0 0 8px; font-size: 1.05rem; }
-.nkrv__actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.bible-import { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+.bible-import__title { margin: 0 0 8px; font-size: 1.05rem; }
+.bible-import__actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
 .btn[hidden] { display: none; }
 .bible-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
 

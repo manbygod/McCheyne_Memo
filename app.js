@@ -8,6 +8,12 @@ const CREDITS = {
   ko: '성경전서 개역한글판 (대한성서공회, 1961)',
   'ko-nkrv': '성경전서 개역개정판 (대한성서공회) — 이 기기에 가져온 본문',
   en: 'Berean Standard Bible (BSB, Public Domain)',
+  'en-niv': 'New International Version (NIV) — 이 기기에 가져온 본문',
+};
+// 저작권 보호 본문은 번들하지 않고, 사용자가 가져온 파일을 이 기기에만 보관: 번역 ID → 언어·언어 선택값·이름·되돌릴 번들 번역 이름
+const IMPORTED = {
+  nkrv: { lang: 'ko', choice: 'ko-nkrv', name: '개역개정', base: '개역한글' },
+  niv: { lang: 'en', choice: 'en-niv', name: 'NIV', base: 'BSB' },
 };
 
 /* ================= 순수 함수 ================= */
@@ -396,10 +402,12 @@ function meditationToShareText(memos, iso, passageRef) {
 
 const memosToText =(memos, passageRef) => memos.map((m) => memoToText(m, passageRef)).join('\n\n----------------------------------------\n\n');
 
-/** 언어 선택값('ko' | 'ko-nkrv' | 'en') → {lang, koVersion}. 가져온 개역개정이 없으면 개역한글로 되돌린다 */
-function parseLangChoice(value, hasNkrv) {
-  if (value === 'en') return { lang: 'en', koVersion: 'krv' };
-  return { lang: 'ko', koVersion: value === 'ko-nkrv' && hasNkrv ? 'nkrv' : 'krv' };
+/** 언어 선택값('ko' | 'ko-nkrv' | 'en' | 'en-niv') → {lang, version}. version 은 가져온 번역 ID, 번들 번역이면 null.
+ * available = 본문을 가져온 번역 ID 집합 — 가져온 본문이 없으면 번들 번역(개역한글·BSB)으로 되돌린다 */
+function parseLangChoice(value, available) {
+  const id = Object.keys(IMPORTED).find((k) => IMPORTED[k].choice === value);
+  if (id && available.has(id)) return { lang: IMPORTED[id].lang, version: id };
+  return { lang: value === 'en' || IMPORTED[id]?.lang === 'en' ? 'en' : 'ko', version: null };
 }
 
 /** 가져온 단일 파일 {책ID: {장: [절…]}} 을 책 ID 기준으로 나눔 (순수 함수). 책이 아닌 키는 unknown 으로 모은다 */
@@ -432,7 +440,7 @@ function validateBookText(data, book) {
 /* ================= 상태 ================= */
 const state = {
   books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null,
-  lang: 'ko', koVersion: 'krv', nkrvBooks: new Set(), date: toISODate(), query: '', page: 1,
+  lang: 'ko', version: null, imported: { nkrv: new Set(), niv: new Set() }, date: toISODate(), query: '', page: 1,
   origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
   chapter: null, // {bookId, ch, verses:[{n,text}]}
@@ -669,38 +677,40 @@ function mergeMemos(a, b) {
 /* ================= 본문 로딩 ================= */
 const bibleCache = new Map(); // `${lang}.${bookId}` → {장: [절 본문]}
 
-/* 개역개정: 사용자가 가져온 파일을 이 브라우저의 IndexedDB 에만 보관한다 (저장소·서버로 보내지 않음) */
-const NKRV_DB = { name: 'mccheyne.bible', store: 'nkrv' };
-function nkrvOpen() {
+/* 가져온 본문(개역개정·NIV): 번역마다 IndexedDB 저장소 하나에 보관한다 (저장소·서버로 보내지 않음) */
+const IMPORT_DB = { name: 'mccheyne.bible', version: 2 };
+function importOpen() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(NKRV_DB.name, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(NKRV_DB.store);
+    const req = indexedDB.open(IMPORT_DB.name, IMPORT_DB.version);
+    req.onupgradeneeded = () => {
+      for (const id of Object.keys(IMPORTED)) if (!req.result.objectStoreNames.contains(id)) req.result.createObjectStore(id);
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-async function nkrvTx(mode, run) {
-  const db = await nkrvOpen();
+async function importTx(version, mode, run) {
+  const db = await importOpen();
   try {
     return await new Promise((resolve, reject) => {
-      const tx = db.transaction(NKRV_DB.store, mode);
-      const req = run(tx.objectStore(NKRV_DB.store));
+      const tx = db.transaction(version, mode);
+      const req = run(tx.objectStore(version));
       tx.oncomplete = () => resolve(req?.result);
       tx.onerror = tx.onabort = () => reject(tx.error);
     });
   } finally { db.close(); }
 }
-const nkrvKeys = () => nkrvTx('readonly', (st) => st.getAllKeys()).catch(() => []);
-const nkrvGet = (bookId) => nkrvTx('readonly', (st) => st.get(bookId));
-const nkrvPut = (bookId, chapters) => nkrvTx('readwrite', (st) => st.put(chapters, bookId));
-const nkrvClear = () => nkrvTx('readwrite', (st) => st.clear());
+const importKeys = (version) => importTx(version, 'readonly', (st) => st.getAllKeys()).catch(() => []);
+const importGet = (version, bookId) => importTx(version, 'readonly', (st) => st.get(bookId));
+const importPut = (version, bookId, chapters) => importTx(version, 'readwrite', (st) => st.put(chapters, bookId));
+const importClear = (version) => importTx(version, 'readwrite', (st) => st.clear());
 
 /** → [{n, text}] — text 가 빈 절(사본에 없는 절)은 번호만 유지. 파일이 없으면 null */
 async function loadChapter(bookId, ch, lang) {
-  const version = lang === 'ko' && state.koVersion === 'nkrv' ? 'ko-nkrv' : lang;
-  const key = `${version}.${bookId}`;
+  const imported = state.version && IMPORTED[state.version].lang === lang ? state.version : null;
+  const key = `${imported ? IMPORTED[imported].choice : lang}.${bookId}`;
   if (!bibleCache.has(key)) {
-    bibleCache.set(key, version === 'ko-nkrv' ? await nkrvGet(bookId) ?? null : await fetchJSON(BIBLE_FILE(lang, bookId), true));
+    bibleCache.set(key, imported ? await importGet(imported, bookId) ?? null : await fetchJSON(BIBLE_FILE(lang, bookId), true));
   }
   const verses = bibleCache.get(key)?.[ch];
   return verses ? verses.map((text, i) => ({ n: i + 1, text })) : null;
@@ -767,26 +777,32 @@ function renderBible() {
   if (!b.bookId) b.bookId = state.books[0].id;
   fillBookSelect(state.lang, b.bookId, $('#bible-book'));
   fillChapterSelect(b.bookId, b.ch);
-  renderNkrvStatus();
+  renderImportStatus();
 }
 
-/** 가져온 개역개정 상태를 화면에 반영: 상태 문구, 삭제 버튼, 언어 선택지 */
-function renderNkrvStatus(extra = '') {
-  const n = state.nkrvBooks.size;
-  const missing = state.books.filter((b) => !state.nkrvBooks.has(b.id));
-  $('#nkrv-status').textContent = (n
-    ? `가져온 개역개정: ${state.books.length}권 중 ${n}권.${missing.length > 10 ? ` 아직 없는 책 ${missing.length}권.` : missing.length ? ` 아직 없는 책: ${missing.map((b) => b.ko).join(', ')}.` : ''}`
-    : '아직 가져온 개역개정 본문이 없습니다.') + (extra ? ` ${extra}` : '');
-  $('#nkrv-remove').hidden = !n;
-  const opt = $('#lang-select option[value="ko-nkrv"]');
-  opt.hidden = opt.disabled = !n;
+/** 가져온 본문 상태를 화면에 반영: 상태 문구, 삭제 버튼, 언어 선택지. extra 는 version 의 상태 문구 뒤에 덧붙인다 */
+function renderImportStatus(version = null, extra = '') {
+  for (const [id, { choice, name }] of Object.entries(IMPORTED)) {
+    const have = state.imported[id];
+    const missing = state.books.filter((b) => !have.has(b.id));
+    $(`#import-status-${id}`).textContent = (have.size
+      ? `가져온 ${name}: ${state.books.length}권 중 ${have.size}권.${missing.length > 10 ? ` 아직 없는 책 ${missing.length}권.` : missing.length ? ` 아직 없는 책: ${missing.map((b) => b.ko).join(', ')}.` : ''}`
+      : `아직 가져온 ${name} 본문이 없습니다.`) + (id === version && extra ? ` ${extra}` : '');
+    $(`#import-remove-${id}`).hidden = !have.size;
+    const opt = $(`#lang-select option[value="${choice}"]`);
+    opt.hidden = opt.disabled = !have.size;
+  }
 }
 
-const langChoice = () => (state.lang === 'en' ? 'en' : state.koVersion === 'nkrv' ? 'ko-nkrv' : 'ko');
+/** 본문을 가져온 번역 ID 집합 */
+const availableVersions = () => new Set(Object.keys(IMPORTED).filter((id) => state.imported[id].size));
+const langChoice = () => (state.version ? IMPORTED[state.version].choice : state.lang);
 
 /** 선택한 단일 파일을 책별로 검사해 통과한 책만 저장. 결과는 가져오기 결과 대화상자로 알린다 */
-async function importNkrvFile(file) {
-  const fail = (text) => showImportResult('가져오지 못했습니다.', [{ text, warn: true }], '개역개정 가져오기 결과');
+async function importBibleFile(version, file) {
+  const { name, choice } = IMPORTED[version];
+  const title = `${name} 가져오기 결과`;
+  const fail = (text) => showImportResult('가져오지 못했습니다.', [{ text, warn: true }], title);
   if (file.size > 15e6) { fail(`${file.name}: 파일이 너무 큽니다.`); return; }
   let data;
   try { data = JSON.parse(await file.text()); } catch { fail(`${file.name}: JSON 형식이 올바르지 않아 읽을 수 없습니다.`); return; }
@@ -798,26 +814,27 @@ async function importNkrvFile(file) {
     const book = bookById(id);
     const r = validateBookText(value, book);
     if (r.error) { rows.push({ text: `${book.ko}: ${r.error}`, warn: true }); continue; }
-    try { await nkrvPut(id, r.chapters); } catch { rows.push({ text: `${book.ko}: 브라우저 저장소에 저장하지 못해 건너뜀`, warn: true }); continue; }
-    bibleCache.delete(`ko-nkrv.${id}`);
-    state.nkrvBooks.add(id);
+    try { await importPut(version, id, r.chapters); } catch { rows.push({ text: `${book.ko}: 브라우저 저장소에 저장하지 못해 건너뜀`, warn: true }); continue; }
+    bibleCache.delete(`${choice}.${id}`);
+    state.imported[version].add(id);
     saved++;
   }
   if (parts.unknown.length) rows.push({ text: `책 ID가 아닌 항목 ${parts.unknown.length}개는 건너뜀: ${parts.unknown.slice(0, 5).join(', ')}${parts.unknown.length > 5 ? ' 등' : ''}`, warn: true });
-  renderNkrvStatus();
-  showImportResult(saved ? `${parts.books.length}권 중 ${saved}권을 가져왔습니다.` : '가져오지 못했습니다.', rows, '개역개정 가져오기 결과');
+  renderImportStatus();
+  showImportResult(saved ? `${parts.books.length}권 중 ${saved}권을 가져왔습니다.` : '가져오지 못했습니다.', rows, title);
 }
 
-async function removeNkrv() {
-  if (!window.confirm('이 기기에 가져온 개역개정 본문을 모두 삭제할까요?\n(메모와 개역한글 본문은 그대로입니다.)')) return;
-  try { await nkrvClear(); } catch { toast('삭제하지 못했습니다.'); return; }
-  state.nkrvBooks.clear();
-  for (const k of [...bibleCache.keys()]) if (k.startsWith('ko-nkrv.')) bibleCache.delete(k);
-  Object.assign(state, parseLangChoice('ko', false));
+async function removeImported(version) {
+  const { name, base, choice, lang } = IMPORTED[version];
+  if (!window.confirm(`이 기기에 가져온 ${name} 본문을 모두 삭제할까요?\n(메모와 ${base} 본문은 그대로입니다.)`)) return;
+  try { await importClear(version); } catch { toast('삭제하지 못했습니다.'); return; }
+  state.imported[version].clear();
+  for (const k of [...bibleCache.keys()]) if (k.startsWith(`${choice}.`)) bibleCache.delete(k);
+  if (state.version === version) state.version = null;
   try { localStorage.setItem(KEYS.lang, langChoice()); } catch { /* 무시 */ }
   $('#lang-select').value = langChoice();
-  renderNkrvStatus('모두 삭제했습니다. 한국어는 개역한글로 표시됩니다.');
-  $('#bible-title').focus();
+  renderImportStatus(version, `모두 삭제했습니다. ${lang === 'ko' ? '한국어' : '영어'}는 ${base}로 표시됩니다.`);
+  document.querySelector(`[data-action="bible-import"][data-version="${version}"]`).focus(); // 삭제 버튼이 숨겨지므로 같은 번역의 가져오기 버튼으로 (aria-describedby 로 상태 문구가 함께 낭독됨)
 }
 
 /* ================= 본문 보기/구절 선택 ================= */
@@ -853,13 +870,13 @@ async function renderReader(bookId, ch, verse = null) {
   if (parseRoute().name !== 'reader') return;
   if (!verses) {
     state.chapter = null;
-    mount($('#passage'), h('p', { role: 'alert' }, state.lang === 'ko' && state.koVersion === 'nkrv'
-      ? `${book.ko}은(는) 가져온 개역개정에 없습니다. 성경 화면에서 개역개정 파일을 가져오거나, 상단 언어를 개역한글로 바꾸세요.`
+    mount($('#passage'), h('p', { role: 'alert' }, state.version
+      ? `${book.ko}은(는) 가져온 ${IMPORTED[state.version].name}에 없습니다. 성경 화면에서 ${IMPORTED[state.version].name} 파일을 가져오거나, 상단 언어를 ${IMPORTED[state.version].base}로 바꾸세요.`
       : `본문(${BIBLE_FILE(state.lang, bookId)})을 불러오지 못했습니다. file:// 이 아닌 로컬 서버(README 참고)로 실행 중인지 확인하세요.`));
     return;
   }
   state.chapter = { bookId, ch, verses };
-  $('#reader-note').textContent = CREDITS[state.lang === 'ko' && state.koVersion === 'nkrv' ? 'ko-nkrv' : state.lang];
+  $('#reader-note').textContent = CREDITS[langChoice()];
   renderPassage();
   if (verse) { // 메모의 본문 버튼으로 왔을 때: 첫 구절로 스크롤하고 포커스
     const btn = document.querySelector(`.verse[data-verse="${verse}"] .verse__text`);
@@ -1820,8 +1837,8 @@ const actions = {
     focusFirst('#memo-passages .chip', '#memo-passages button', '#add-book');
   },
   'memos-import': () => $('#import-file').click(),
-  'nkrv-import': () => $('#nkrv-file').click(),
-  'nkrv-remove': removeNkrv,
+  'bible-import': (el) => $(`#import-file-${el.dataset.version}`).click(),
+  'bible-remove': (el) => removeImported(el.dataset.version),
   'search-clear': () => { const input = $('#search-input'); input.value = ''; state.query = ''; state.page = 1; renderMemos(); input.focus(); },
   'find-clear': () => { $('#find-input').value = ''; searchChapter(''); $('#find-input').focus(); },
   'dialog-close': (el) => el.closest('dialog').close(),
@@ -2049,12 +2066,12 @@ document.addEventListener('change', (e) => {
     const [file] = e.target.files;
     e.target.value = '';
     if (file) importMemosFile(file);
-  } else if (e.target.id === 'nkrv-file') {
+  } else if (e.target.dataset.importVersion) {
     const [file] = e.target.files;
     e.target.value = '';
-    if (file) importNkrvFile(file);
+    if (file) importBibleFile(e.target.dataset.importVersion, file);
   } else if (e.target.id === 'lang-select') {
-    Object.assign(state, parseLangChoice(e.target.value, state.nkrvBooks.size > 0));
+    Object.assign(state, parseLangChoice(e.target.value, availableVersions()));
     try { localStorage.setItem(KEYS.lang, langChoice()); } catch { /* 무시 */ }
     document.documentElement.lang = 'ko';
     route();
@@ -2123,11 +2140,11 @@ async function init() {
     state.labelsAt = readJSON(KEYS.labelsAt, '');
     syncLabelsFromMemos();
     persistMemos(); // 레거시 메모를 새 모델로 저장
-    state.nkrvBooks = new Set(await nkrvKeys());
+    for (const id of Object.keys(IMPORTED)) state.imported[id] = new Set(await importKeys(id));
     let saved = 'ko';
     try { saved = localStorage.getItem(KEYS.lang) || 'ko'; } catch { /* 기본값 */ }
-    Object.assign(state, parseLangChoice(saved, state.nkrvBooks.size > 0));
-    renderNkrvStatus();
+    Object.assign(state, parseLangChoice(saved, availableVersions()));
+    renderImportStatus();
     $('#lang-select').value = langChoice();
 
     if (fbCfg?.projectId) initFirebase(fbCfg).catch(() => toast('Firebase 연결 실패 - 로컬 모드로 동작합니다.')); // 화면 표시를 막지 않음

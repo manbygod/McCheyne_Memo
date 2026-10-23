@@ -788,6 +788,10 @@ function renderImportStatus(version = null, extra = '') {
     $(`#import-status-${id}`).textContent = (have.size
       ? `가져온 ${name}: ${state.books.length}권 중 ${have.size}권.${missing.length > 10 ? ` 아직 없는 책 ${missing.length}권.` : missing.length ? ` 아직 없는 책: ${missing.map((b) => b.ko).join(', ')}.` : ''}`
       : `아직 가져온 ${name} 본문이 없습니다.`) + (id === version && extra ? ` ${extra}` : '');
+    const complete = state.books.length > 0 && !missing.length; // 66권을 모두 가져왔으면 안내·가져오기 버튼은 접고 삭제만 남김
+    for (const part of ['intro', 'format', 'open']) $(`#import-${part}-${id}`).hidden = complete;
+    $(`#import-done-${id}`).hidden = !complete;
+    $(`#import-status-${id}`).classList.toggle('visually-hidden', complete); // 화면에는 숨기되 낭독용 상태 문구는 유지
     $(`#import-remove-${id}`).hidden = !have.size;
     const opt = $(`#lang-select option[value="${choice}"]`);
     opt.hidden = opt.disabled = !have.size;
@@ -821,6 +825,7 @@ async function importBibleFile(version, file) {
   }
   if (parts.unknown.length) rows.push({ text: `책 ID가 아닌 항목 ${parts.unknown.length}개는 건너뜀: ${parts.unknown.slice(0, 5).join(', ')}${parts.unknown.length > 5 ? ' 등' : ''}`, warn: true });
   renderImportStatus();
+  if ($(`#import-open-${version}`).hidden) $(`#import-remove-${version}`).focus(); // 가져오기 버튼이 접혔으므로 대화상자를 닫으면 삭제 버튼으로 돌아오게 함
   showImportResult(saved ? `${parts.books.length}권 중 ${saved}권을 가져왔습니다.` : '가져오지 못했습니다.', rows, title);
 }
 
@@ -834,7 +839,7 @@ async function removeImported(version) {
   try { localStorage.setItem(KEYS.lang, langChoice()); } catch { /* 무시 */ }
   $('#lang-select').value = langChoice();
   renderImportStatus(version, `모두 삭제했습니다. ${lang === 'ko' ? '한국어' : '영어'}는 ${base}로 표시됩니다.`);
-  document.querySelector(`[data-action="bible-import"][data-version="${version}"]`).focus(); // 삭제 버튼이 숨겨지므로 같은 번역의 가져오기 버튼으로 (aria-describedby 로 상태 문구가 함께 낭독됨)
+  $(`#import-open-${version}`).focus(); // 삭제 버튼이 숨겨지므로 같은 번역의 가져오기 버튼으로 (aria-describedby 로 상태 문구가 함께 낭독됨)
 }
 
 /* ================= 본문 보기/구절 선택 ================= */

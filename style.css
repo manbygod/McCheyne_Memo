@@ -202,8 +202,8 @@ textarea.field__control { width: 100%; resize: vertical; }
 }
 .reader__jump-btn:hover { opacity: 1; background: var(--c-primary); color: var(--c-primary-text); }
 .selection-bar__info { flex: 1 0 100%; font-weight: 600; } /* 구절 이름은 윗줄, 아랫줄에 메모·복사·끝 절·해제를 한 줄로 */
-.selection-bar .btn { padding: 8px 12px; min-width: 4.7rem; } /* 메모·복사·해제 폭을 같게 (글자 폭만 차지하던 약 58px보다 30% 넓힘) */
-.selection-bar .field__control { align-self: stretch; min-height: 42px; } /* 버튼(테두리 포함 42px)과 높이 맞춤: 같은 줄의 가장 큰 높이로 늘림 */
+.selection-bar .btn { padding: 8px 12px; min-width: 72px; } /* 메모·복사·해제 폭을 같게 */
+.selection-bar .field__control { align-self: stretch; min-height: 42px; width: 107px; } /* 버튼(테두리 포함 42px)과 높이 맞춤: 같은 줄의 가장 큰 높이로 늘림 */
 
 /* memos */
 .search { display: grid; gap: 4px; margin-bottom: 12px; }

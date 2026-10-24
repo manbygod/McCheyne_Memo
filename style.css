@@ -292,6 +292,8 @@ button.chip { cursor: pointer; color: inherit; }
 .share__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .form__actions--start { justify-content: flex-start; flex-wrap: wrap; }
 .form__actions .btn[data-action="dialog-close"], .form__actions .btn[type="submit"] { min-width: 7rem; } /* 팝업의 닫기·확인·취소·저장: 누르기 쉽도록 글자 폭만 차지하던 약 57px의 두 배 */
+/* 절의 메모 목록: 메모마다 본문·수정·공유·삭제·닫기 다섯 버튼을 한 줄에 같은 폭으로 */
+.form__actions.form__actions--fifth .btn { flex: 0 0 calc((100% - 32px) / 5); min-width: 0; padding-inline: 4px; }
 .form__actions--compact { justify-content: flex-start; } /* 메모 읽기: 본문·수정·공유·삭제·닫기 다섯 버튼을 한 줄에 */
 .form__actions.form__actions--compact .btn[data-action] { flex: 1 1 0; min-width: 0; padding-inline: 4px; }
 

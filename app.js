@@ -1001,11 +1001,12 @@ function showMemosDialog(ref, list) {
   $('#verse-memos-title').replaceChildren(h('span', { lang: state.lang }, ref), ` · 메모 ${list.length}개`);
   mount($('#verse-memos-list'), list.map((m) => h('article', { class: 'verse-memo', 'data-id': m.id },
     h('p', { class: 'read__text' }, memoNodes(m)),
-    h('div', { class: 'form__actions form__actions--start' },
+    h('div', { class: 'form__actions form__actions--start form__actions--fifth' },
       passageLink(m),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-edit', 'aria-label': `${refOf(m)} 메모 수정` }, '수정'),
       h('button', { type: 'button', class: 'btn', 'data-action': 'memo-share', 'aria-label': `${refOf(m)} 메모 공유` }, '공유'),
-      h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'memo-delete', 'aria-label': `${refOf(m)} 메모 삭제` }, '삭제')))));
+      h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'memo-delete', 'aria-label': `${refOf(m)} 메모 삭제` }, '삭제'),
+      h('button', { type: 'button', class: 'btn', 'data-action': 'dialog-close' }, '닫기')))));
   moveDialog($('#verse-memos-dialog'), 0, 0);
   $('#verse-memos-dialog').showModal();
 }

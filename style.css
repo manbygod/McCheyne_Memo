@@ -256,8 +256,8 @@ button.chip { cursor: pointer; color: inherit; }
 /* 팝업이 열려 있으면 뒤 페이지 스크롤 잠금: iOS가 입력창을 보이려고 페이지를 밀면 커서가 어긋남 */
 :root:has(.dialog[open]) { overflow: hidden; overscroll-behavior: none; }
 .dialog::backdrop { background: rgb(0 0 0 / .45); }
-/* 팝업을 열 때 내용 영역으로 옮겨진 포커스(스크린리더가 내용을 읽도록)는 상자로 표시하지 않음. 버튼·링크의 포커스 링은 유지 */
-.read__text:focus-visible, .dialog__body:focus-visible { outline: none; }
+/* 팝업을 열 때 내용 영역으로 옮겨진 포커스(스크린리더가 내용을 읽도록)는 마우스·터치로 열었을 때만 상자를 숨김. 키보드로 열면 포커스 링 표시 */
+:root[data-input="pointer"] .read__text:focus-visible, :root[data-input="pointer"] .dialog__body:focus-visible { outline: none; }
 .btn { font-weight: 400; }
 .dialog__title { margin: 0 0 8px; font-size: 1.15rem; }
 .dialog__grip { display: flex; justify-content: center; align-items: center; height: 18px; margin: -6px 0 6px; cursor: move; touch-action: none; user-select: none; }

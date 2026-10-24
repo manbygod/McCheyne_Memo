@@ -706,8 +706,8 @@ const importPut = (version, bookId, chapters) => importTx(version, 'readwrite', 
 const importClear = (version) => importTx(version, 'readwrite', (st) => st.clear());
 
 /** → [{n, text}] — text 가 빈 절(사본에 없는 절)은 번호만 유지. 파일이 없으면 null */
-async function loadChapter(bookId, ch, lang) {
-  const imported = state.version && IMPORTED[state.version].lang === lang ? state.version : null;
+async function loadChapter(bookId, ch, lang, version = state.version) {
+  const imported = version && IMPORTED[version].lang === lang ? version : null;
   const key = `${imported ? IMPORTED[imported].choice : lang}.${bookId}`;
   if (!bibleCache.has(key)) {
     bibleCache.set(key, imported ? await importGet(imported, bookId) ?? null : await fetchJSON(BIBLE_FILE(lang, bookId), true));
@@ -1182,7 +1182,8 @@ function renderDraft() {
         h('strong', {}, draftRef(d, p)),
         h('div', { class: 'memo-passage__actions' },
           h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'passage-remove', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 삭제` }, '삭제'),
-          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 보기` }, '보기'))),
+          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 보기` }, '보기'),
+          ALT_VIEW[d.lang] && h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view-alt', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 ${IMPORTED[ALT_VIEW[d.lang].version].name} 보기` }, `${IMPORTED[ALT_VIEW[d.lang].version].name} 보기`))),
       nums.length <= 15 && h('ul', { class: 'chips', 'aria-label': '절' }, nums.map((n) =>
         h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'verse-remove', 'data-pi': pi, 'data-verse': n, 'aria-label': `${n}절 제거` }, `${n}절 ×`)))));
   }));
@@ -1194,23 +1195,30 @@ function renderDraft() {
   }));
 }
 
-/** 메모에 담긴 말씀의 장 전체를 팝업으로 보여 줌 (메모에 연결된 절은 강조) */
-async function openPassageView(p) {
+/** 메모 언어 → 반대 언어로 볼 때 쓸 가져오기 번역 (영어 메모는 개역개정, 한국어 메모는 NIV). 버튼 이름은 항상 이 번역 이름 */
+const ALT_VIEW = { en: { lang: 'ko', version: 'nkrv' }, ko: { lang: 'en', version: 'niv' } };
+/** 가져온 번역에 그 책이 있으면 가져온 번역, 없으면 번들된 번역(개역한글·BSB) — 팝업 제목에 실제 번역을 표시 */
+const altViewVersion = (memoLang, p) => (state.imported[ALT_VIEW[memoLang].version]?.has(p.bookId) ? ALT_VIEW[memoLang].version : null);
+const altViewName = (memoLang, p) => IMPORTED[altViewVersion(memoLang, p) ?? ALT_VIEW[memoLang].version][altViewVersion(memoLang, p) ? 'name' : 'base'];
+
+/** 메모에 담긴 말씀의 장 전체를 팝업으로 보여 줌 (메모에 연결된 절은 강조). alt 가 true 면 메모와 반대 언어 본문으로 보여 줌 */
+async function openPassageView(p, alt = false) {
   const d = state.draft;
   const dialog = $('#passage-view-dialog');
+  const lang = alt ? ALT_VIEW[d.lang].lang : d.lang;
   let verses = null;
-  try { verses = await loadChapter(p.bookId, p.chapter, d.lang); } catch { /* 아래에서 안내 */ }
-  $('#passage-view-title').lang = d.lang; // 책 이름이 메모 언어로 표기되므로 올바른 음성으로 낭독
-  $('#passage-view-title').textContent = formatRef(bookById(p.bookId), d.lang, p.chapter, []);
+  try { verses = await (alt ? loadChapter(p.bookId, p.chapter, lang, altViewVersion(d.lang, p)) : loadChapter(p.bookId, p.chapter, d.lang)); } catch { /* 아래에서 안내 */ }
+  $('#passage-view-title').lang = lang; // 책 이름이 본문 언어로 표기되므로 올바른 음성으로 낭독
+  $('#passage-view-title').textContent = formatRef(bookById(p.bookId), lang, p.chapter, []) + (alt ? ` (${altViewName(d.lang, p)})` : '');
   mount($('#passage-view-body'), verses
     ? verses.filter((v) => v.text).map((v) => {
       const on = p.verses.has(v.n);
-      return h('p', { class: `passage-view__verse${on ? ' passage-view__verse--linked' : ''}`, lang: d.lang, 'data-n': v.n },
+      return h('p', { class: `passage-view__verse${on ? ' passage-view__verse--linked' : ''}`, lang, 'data-n': v.n },
         h('span', { class: 'passage-view__num' }, v.n),
-        on && h('span', { class: 'visually-hidden' }, d.lang === 'en' ? ' (linked) ' : ' (연결된 절) '),
+        on && h('span', { class: 'visually-hidden' }, lang === 'en' ? ' (linked) ' : ' (연결된 절) '),
         ' ', v.text);
     })
-    : h('p', {}, '본문을 불러오지 못했습니다.'));
+    : h('p', { role: 'alert' }, '본문을 불러오지 못했습니다.'));
   moveDialog(dialog, 0, 0);
   dialog.showModal();
   $('#passage-view-body').querySelector('.passage-view__verse--linked')?.scrollIntoView({ block: 'center' });
@@ -1833,6 +1841,7 @@ const actions = {
     focusFirst('#memo-passages button', '#add-book');
   },
   'passage-view': (el) => openPassageView(state.draft.passages[Number(el.dataset.pi)]),
+  'passage-view-alt': (el) => openPassageView(state.draft.passages[Number(el.dataset.pi)], true),
   'verse-remove': (el) => {
     const { passages } = state.draft;
     const p = passages[Number(el.dataset.pi)];

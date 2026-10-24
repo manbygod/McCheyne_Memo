@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://content.googleapis.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-24q">
+  <link rel="stylesheet" href="style.css?v=2026-10-24t">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -185,7 +185,7 @@
         <div class="chips" id="memo-labels"></div>
         <button type="button" class="btn btn--ghost form__manage" data-action="labels-open">레이블 관리</button>
       </fieldset>
-      <div class="form__actions form__actions--spaced">
+      <div class="form__actions">
         <button type="button" class="btn btn--ghost" data-action="dialog-close">취소</button>
         <button type="submit" class="btn btn--primary">저장</button>
       </div>
@@ -197,7 +197,7 @@
     <div class="dialog__grip" data-drag-handle aria-hidden="true" title="끌어서 창 위치 이동"></div>
     <h2 class="dialog__title visually-hidden" id="read-dialog-title">메모 읽기</h2>
     <p class="read__text" id="read-text" tabindex="-1" autofocus></p>
-    <div class="form__actions">
+    <div class="form__actions form__actions--compact">
       <a class="btn" id="read-passage" href="#/" data-action="passage-open">본문</a>
       <button type="button" class="btn" data-action="read-edit">수정</button>
       <button type="button" class="btn" data-action="read-share">공유</button>

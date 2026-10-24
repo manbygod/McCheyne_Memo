@@ -1181,9 +1181,9 @@ function renderDraft() {
       h('div', { class: 'memo-passage__head' },
         h('strong', {}, draftRef(d, p)),
         h('div', { class: 'memo-passage__actions' },
-          h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'passage-remove', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 삭제` }, '삭제'),
-          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 보기` }, '보기'),
-          ALT_VIEW[d.lang] && h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view-alt', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 ${IMPORTED[ALT_VIEW[d.lang].version].name} 보기` }, `${IMPORTED[ALT_VIEW[d.lang].version].name} 보기`))),
+          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 본문 보기` }, '본문'),
+          h('button', { type: 'button', class: 'btn', 'data-action': 'passage-view-alt', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 말씀 ${ALT_VIEW[d.lang].label} 보기` }, ALT_VIEW[d.lang].label),
+          h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'passage-remove', 'data-pi': pi, 'aria-label': `${draftRef(d, p)} 삭제` }, '삭제'))),
       nums.length <= 15 && h('ul', { class: 'chips', 'aria-label': '절' }, nums.map((n) =>
         h('li', {}, h('button', { type: 'button', class: 'chip', 'data-action': 'verse-remove', 'data-pi': pi, 'data-verse': n, 'aria-label': `${n}절 제거` }, `${n}절 ×`)))));
   }));
@@ -1195,8 +1195,8 @@ function renderDraft() {
   }));
 }
 
-/** 메모 언어 → 반대 언어로 볼 때 쓸 가져오기 번역 (영어 메모는 개역개정, 한국어 메모는 NIV). 버튼 이름은 항상 이 번역 이름 */
-const ALT_VIEW = { en: { lang: 'ko', version: 'nkrv' }, ko: { lang: 'en', version: 'niv' } };
+/** 메모 언어 → 반대 언어로 볼 때 쓸 가져오기 번역 (영어 메모는 개역개정, 한국어 메모는 NIV). 버튼 이름(label)은 가져오기 여부와 상관없이 고정 */
+const ALT_VIEW = { en: { lang: 'ko', version: 'nkrv', label: '한글' }, ko: { lang: 'en', version: 'niv', label: 'NIV' } };
 /** 가져온 번역에 그 책이 있으면 가져온 번역, 없으면 번들된 번역(개역한글·BSB) — 팝업 제목에 실제 번역을 표시 */
 const altViewVersion = (memoLang, p) => (state.imported[ALT_VIEW[memoLang].version]?.has(p.bookId) ? ALT_VIEW[memoLang].version : null);
 const altViewName = (memoLang, p) => IMPORTED[altViewVersion(memoLang, p) ?? ALT_VIEW[memoLang].version][altViewVersion(memoLang, p) ? 'name' : 'base'];

@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://content.googleapis.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-24i">
+  <link rel="stylesheet" href="style.css?v=2026-10-24j">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -124,8 +124,8 @@
       <div class="passage" id="passage" lang="ko"></div>
       <div class="selection-bar" id="selection-bar" role="toolbar" aria-label="선택한 구절 도구" hidden>
         <span class="selection-bar__info" id="selection-info"></span>
-        <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
         <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
+        <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
         <label class="visually-hidden" for="range-end">선택한 절부터 이 절까지 범위로 선택</label>
         <select class="field__control" id="range-end"></select>
         <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
@@ -281,6 +281,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-24i"></script>
+  <script src="app.js?v=2026-10-24k"></script>
 </body>
 </html>

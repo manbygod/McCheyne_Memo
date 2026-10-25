@@ -124,11 +124,11 @@
       <div class="passage" id="passage" lang="ko"></div>
       <div class="selection-bar" id="selection-bar" role="toolbar" aria-label="선택한 구절 도구" hidden>
         <span class="selection-bar__info" id="selection-info"></span>
-        <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
+        <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
         <button type="button" class="btn" data-action="copy-selection" aria-label="선택한 구절 복사">복사</button>
         <label class="visually-hidden" for="range-end">선택한 절부터 이 절까지 범위로 선택</label>
         <select class="field__control" id="range-end"></select>
-        <button type="button" class="btn btn--ghost" data-action="clear-selection" aria-label="선택 해제">해제</button>
+        <button type="button" class="btn btn--primary" data-action="memo-new" aria-label="선택한 구절로 메모 작성">메모</button>
       </div>
       <p class="visually-hidden" id="selection-status" role="status"></p>
     </section>

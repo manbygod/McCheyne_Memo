@@ -760,7 +760,7 @@ function renderToday() {
     return h('li', { class: 'reading-list__item' },
       refs.length
         ? h('div', { class: 'reading-list__links' }, refs.map((r) =>
-          h('a', { class: 'btn', lang: state.lang, href: `#/read/${r.book}/${r.chapter}` }, formatReading(r, bookById(r.book), state.lang))))
+          h('a', { class: 'btn', lang: state.lang, href: `#/read/${r.book}/${r.chapter}${r.verse1 ? `/${r.verse1}` : ''}` }, formatReading(r, bookById(r.book), state.lang))))
         : h('span', { class: 'reading-list__empty' }, '여유일 (밀린 본문 읽기)'));
   }));
 }

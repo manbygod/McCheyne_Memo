@@ -5,5 +5,6 @@
   "storageBucket": "mccheyne-7bd03.firebasestorage.app",
   "messagingSenderId": "530148476124",
   "appId": "1:530148476124:web:69fe300626b4b0d988a019",
-  "measurementId": "G-0Y433QKMNL"
+  "measurementId": "G-0Y433QKMNL",
+  "recaptchaEnterpriseSiteKey": "6Lf_8wAuAAAAAPN_sx4akFrbHt0JIvF348WPOYL6"
 }

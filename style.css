@@ -297,6 +297,22 @@ button.chip { cursor: pointer; color: inherit; }
 .form__actions--compact { justify-content: flex-start; } /* 메모 읽기: 본문·수정·공유·삭제·닫기 다섯 버튼을 한 줄에 */
 .form__actions.form__actions--compact .btn[data-action] { flex: 1 1 0; min-width: 0; padding-inline: 4px; }
 
+/* chat (AI 질문) */
+.chat { width: min(640px, calc(100vw - 24px)); }
+.chat__notice { margin: 4px 0; font-size: .85rem; color: var(--c-muted); }
+.chat__options { display: grid; gap: 6px; }
+.chat__options .check { gap: 8px; min-height: 44px; } /* 체크 칸이 작아서 글자 줄 전체를 누를 수 있게 높이 확보 */
+.chat__options .check input { width: 20px; height: 20px; }
+.chat__log { list-style: none; margin: 8px 0; padding: 8px; display: grid; gap: 8px; max-height: 40vh; overflow: auto; border: 1px solid var(--c-border); border-radius: var(--radius); }
+@supports (height: 1dvh) { .chat__log { max-height: 40dvh; } }
+.chat__message { margin: 0; padding: 8px 10px; border-radius: var(--radius); white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat__message--user { justify-self: end; max-width: 90%; background: color-mix(in srgb, var(--c-primary) 18%, var(--c-surface)); }
+.chat__message--model { justify-self: start; max-width: 95%; border: 1px solid var(--c-border); background: var(--c-bg); }
+.chat__message--pending { color: var(--c-muted); }
+.chat__message--error { border-color: var(--c-danger); color: var(--c-danger); }
+.chat__message--hint { color: var(--c-muted); }
+.chat__refs { margin: 6px 0 0; font-size: .8rem; color: var(--c-muted); }
+
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);
   background: #222; color: #fff; padding: 8px 16px; border-radius: 999px;

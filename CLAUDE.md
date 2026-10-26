@@ -4,7 +4,7 @@
 맥체인 읽기표에 따라 매일 말씀을 읽고, 구절을 선택해 복사/메모/공유하는 정적 웹앱 (GitHub Pages 배포).
 
 ## 디렉터리 규약
-- 프론트 3종은 루트에: `index.html`, `style.css`, `app.js` (중첩 폴더 금지, 첫 화면은 `/`)
+- 프론트는 루트에: `index.html`, `style.css`, `app.js`, 챗봇 모듈 `chat.js`(처음 열 때만 동적 import) (중첩 폴더 금지, 첫 화면은 `/`)
 - 데이터는 `data/` 안에만 (`books.json`, `plan.json`, `labels.json`, `memos.json`, `bible/ko/*.json`)
 - 문서는 루트: `CLAUDE.md`, `skills.md`, `README.md`
 - 생성 스크립트는 `scripts/` (`node scripts/gen-data.js`)

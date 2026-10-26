@@ -61,10 +61,23 @@ PDF는 이미지가 아니라 진짜 글자로 만들며, `fonts/NotoSansKR-subs
 - [ ] **Authentication → 로그인 방법**에서 Google 사용 설정
 - [ ] **Authentication → 설정 → 승인된 도메인**에 배포 주소(`<user>.github.io`) 추가 (`localhost`는 기본 포함)
 
+### AI 질문 (Gemini 챗봇)
+로그인하면 헤더에 "AI 질문"이 나타납니다. 본문(지금 읽는 장 / 선택한 날짜의 읽기표)과, 켜 둔 경우 내 메모를 참고해 질문에 답합니다.
+- **구조**: 서버 코드 없음. 브라우저 → Firebase AI Logic → Gemini Developer API. 프로젝트는 **Spark(무료) 요금제를 유지**하세요. 결제(Cloud Billing)를 연결하면 무료 한도 보호가 사라집니다.
+- **대화는 저장하지 않습니다.** 새로고침·로그아웃하면 사라집니다. 하루 질문 횟수(30회)는 브라우저 안의 보조 한도라 서버가 강제하지 않습니다. 실제 상한은 Gemini 무료 구간의 프로젝트 할당량이며, 다 쓰면 챗봇만 일시적으로 멈춥니다.
+- **보내는 데이터**: 질문, 참고 본문(번들된 개역한글·BSB만. 가져온 개역개정·NIV는 보내지 않음), "내 메모를 참고해서 답하기"를 켠 경우 관련 메모 최대 5개(4,000자, 메모에 붙은 성경 본문은 제외). 메모 옵션은 창을 열 때마다 꺼집니다. 무료 구간은 입력 내용이 서비스 개선에 쓰일 수 있다고 알려져 있으니 [Gemini API 약관](https://ai.google.dev/gemini-api/terms)을 확인하세요.
+- **외부 의존(CDN)**: `chat.js`가 처음 열릴 때 `https://www.gstatic.com/firebasejs/11.10.0/`의 `firebase-ai.js`(와 App Check 사용 시 `firebase-app-check.js`)를 불러옵니다. 기존 로그인·동기화는 10.12.2를 쓰므로, 챗봇은 같은 설정으로 별도 Firebase 앱(`mccheyne-ai`)을 만들어 씁니다. 빌드·npm 의존성은 없습니다.
+
+#### AI 질문 설정 체크리스트 (콘솔에서 직접)
+- [ ] **Firebase 콘솔 → AI Logic → 시작하기 → Gemini Developer API** 선택 (Spark 유지)
+- [ ] **App Check**: Google Cloud에서 reCAPTCHA 키(웹, 점수 기반, 도메인에 배포 주소·`localhost`)를 만들고, Firebase 콘솔 App Check에서 앱에 **Fraud Defense(reCAPTCHA Enterprise)** 로 같은 사이트 키를 등록한 뒤, `data/firebase-config.json`에 `"recaptchaEnterpriseSiteKey": "<사이트 키>"`를 추가하고 AI Logic을 시행(enforce)으로 설정. (예전 v3 키는 `"recaptchaSiteKey"`로 지원.) 키가 없으면 App Check 없이 동작하지만 외부 호출을 막지 못합니다. 비밀 키는 저장소에 넣지 않습니다.
+- [ ] **AI Logic → 설정**에서 사용자별 분당 요청 한도를 낮게 설정
+- [ ] (선택) `data/firebase-config.json`의 `"chatModel"`로 모델 이름 변경 (기본 `gemini-flash-lite-latest`. 더 큰 모델을 쓰려면 여기서 교체하되, 무료 구간에서 응답이 오지 않는 모델이 있으니 먼저 시험하세요)
+
 메모 스키마: `id, content, lang, passages[{bookId, chapter, verses[], text}], labels[], createdAt, updatedAt` (한 메모에 여러 책·장의 말씀 가능, 이전 단일 구절 형식은 불러올 때 자동 변환)
 
 ## GitHub Pages 배포 메모
-1. 저장소 루트에 `index.html`, `style.css`, `app.js`, `data/` 를 push (`McCheyne` 폴더 내용이 저장소 루트가 되게)
+1. 저장소 루트에 `index.html`, `style.css`, `app.js`, `chat.js`, `data/` 를 push (`McCheyne` 폴더 내용이 저장소 루트가 되게)
 2. Settings → Pages → Source: `Deploy from a branch`, Branch: `main` / `(root)`
 3. `https://<user>.github.io/<repo>/` 에서 확인. 모든 경로가 상대경로라 하위 경로에서도 동작
 4. `data/firebase-config.json`은 올리지 않으면 로컬 모드로 동작 (404는 무시됨)
@@ -75,7 +88,7 @@ PDF는 이미지가 아니라 진짜 글자로 만들며, `fonts/NotoSansKR-subs
 
 ## 파일 구조
 ```
-index.html  style.css  app.js
+index.html  style.css  app.js  chat.js
 data/       books.json plan.json labels.json memos.json bible/ko/
 fonts/      Literata-*.woff2 LICENSE-Literata.txt
 scripts/    gen-data.js

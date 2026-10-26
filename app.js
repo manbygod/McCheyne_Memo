@@ -49,6 +49,16 @@ function formatReading(r, book, lang) {
   return c2 ? `${name} ${c}-${c2}` : `${name} ${c}`;
 }
 
+/** 읽기표 항목 → 장 단위 구간 [{bookId, chapter, from, to}] (from/to 가 null 이면 장 처음/끝). 순수 함수 */
+function readingSpans(r) {
+  const last = r.chapter2 ?? r.chapter;
+  const spans = [];
+  for (let ch = r.chapter; ch <= last; ch++) {
+    spans.push({ bookId: r.book, chapter: ch, from: ch === r.chapter ? r.verse1 ?? null : null, to: ch === last ? r.verse2 ?? null : null });
+  }
+  return spans;
+}
+
 /** [1,2,3,5,7,8] → '1-3, 5, 7-8' */
 function compressRanges(nums) {
   const s = [...new Set(nums)].sort((a, b) => a - b);
@@ -439,7 +449,7 @@ function validateBookText(data, book) {
 
 /* ================= 상태 ================= */
 const state = {
-  books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null,
+  books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null, fbCfg: null,
   lang: 'ko', version: null, imported: { nkrv: new Set(), niv: new Set() }, date: toISODate(), query: '', page: 1,
   origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
@@ -529,6 +539,7 @@ async function initFirebase(cfg) {
   const [{ initializeApp }, A, fs] = await Promise.all([
     import(`${base}firebase-app.js`), import(`${base}firebase-auth.js`), import(`${base}firebase-firestore.js`)]);
   const app = initializeApp(cfg);
+  state.fbCfg = cfg;
   const auth = A.getAuth(app);
   const db = fs.getFirestore(app);
   state.auth = {
@@ -538,7 +549,7 @@ async function initFirebase(cfg) {
   renderAuth();
   A.onAuthStateChanged(auth, async (user) => {
     state.user = user ? { uid: user.uid, name: user.displayName || user.email || '로그인됨' } : null;
-    if (!user) { state.remote = null; renderAuth(); return; }
+    if (!user) { state.remote = null; renderAuth(); chatPromise?.then((c) => c.reset()); return; }
     const col = fs.collection(db, 'users', user.uid, 'memos');
     state.remote = {
       list: async () => (await fs.getDocs(col)).docs.map((d) => d.data()),
@@ -624,6 +635,7 @@ function renderAuth() {
   $('#auth-box').hidden = !state.auth;
   $('#auth-status').textContent = state.user ? state.user.name : '로컬 저장 중';
   $('#auth-button').textContent = state.user ? '로그아웃' : 'Google 로그인';
+  $('#chat-open').hidden = !(state.user && state.fbCfg); // AI 질문은 로그인한 사용자에게만 보임 (화면상 안내이며 서버가 강제하지는 않음)
 }
 
 /** Firebase Auth 오류 코드 → 사용자 안내 (순수 함수) */
@@ -647,6 +659,7 @@ async function toggleAuth() {
     // 공용 PC 보호: 로그아웃하면 이 기기의 메모를 지움 (클라우드에는 남아 있음)
     if (!window.confirm('로그아웃하면 이 기기에 저장된 메모가 지워집니다.\n(클라우드에는 그대로 남아 있고, 다시 로그인하면 불러옵니다.)\n\n계속할까요?')) return;
     await state.auth.signOut();
+    chatPromise?.then((c) => c.reset()); // 대화·메모 선택을 기기에 남기지 않음
     state.memos = [];
     state.tombstones = {};
     persistMemos();
@@ -714,6 +727,36 @@ async function loadChapter(bookId, ch, lang, version = state.version) {
   }
   const verses = bibleCache.get(key)?.[ch];
   return verses ? verses.map((text, i) => ({ n: i + 1, text })) : null;
+}
+
+/* ================= 챗봇 (Gemini, chat.js 지연 로드) ================= */
+/** 챗봇이 참고할 본문 범위: 지금 읽는 장(선택한 절 포함) / 선택한 날짜의 읽기표 */
+function chatScopes() {
+  const reader = parseRoute().name === 'reader' && state.chapter
+    ? [{ bookId: state.chapter.bookId, chapter: state.chapter.ch, from: null, to: null, focus: [...state.selected].sort((a, b) => a - b) }]
+    : null;
+  const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
+  const today = day.flatMap((t) => [].concat(t ?? [])).map(normalizeReading).flatMap(readingSpans).filter((s) => bookById(s.bookId));
+  return { reader, today };
+}
+
+function spanLabel(s) {
+  const name = bookName(bookById(s.bookId), state.lang);
+  if (!s.from && !s.to) return `${name} ${s.chapter}`;
+  return `${name} ${s.chapter}:${s.from ?? 1}-${s.to ?? (state.lang === 'en' ? 'end' : '끝')}`;
+}
+
+let chatPromise = null;
+function withChat(run) {
+  chatPromise ??= import('./chat.js?v=2026-10-26h').then((m) => m.createChat({
+    $, h, mount, toast, cfg: state.fbCfg,
+    user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
+    memos: () => state.memos, scopes: chatScopes, refOf, spanLabel,
+    loadChapter: (bookId, ch, lang) => loadChapter(bookId, ch, lang, null), // 가져온 개역개정·NIV 는 보내지 않도록 번들 본문만 (version=null)
+    translation: () => (state.lang === 'en' ? 'Berean Standard Bible (BSB)' : '개역한글(1961)'),
+    prepare: (dialog) => { delete dialog.dataset.vv; moveDialog(dialog, 0, 0); },
+  }));
+  return chatPromise.then(run).catch((e) => { chatPromise = null; console.error('[chat]', e); toast('챗봇을 불러오지 못했습니다.'); });
 }
 
 /* ================= 라우팅 ================= */
@@ -1870,6 +1913,8 @@ const actions = {
   'read-share': (el) => withReadMemo(el, shareMemo),
   'read-delete': (el) => withReadMemo(el, confirmDelete),
   'auth-toggle': toggleAuth,
+  'chat-open': () => withChat((c) => c.open()),
+  'chat-clear': () => withChat((c) => c.clear()),
   'page-go': (el) => {
     state.page = Number(el.dataset.page);
     renderMemos();
@@ -2027,6 +2072,10 @@ document.addEventListener('click', (e) => {
   if (verse) toggleVerse(Number(verse.dataset.verse), e.shiftKey);
 });
 
+document.addEventListener('keydown', (e) => {
+  if (e.target.id === 'chat-input' && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); e.target.form.requestSubmit(); }
+});
+
 document.addEventListener('focusin', (e) => { if (e.target.id === 'range-end') startRange(); });
 
 document.addEventListener('submit', (e) => {
@@ -2063,7 +2112,8 @@ document.addEventListener('submit', (e) => {
     refreshViews();
     toast(r.merged ? `레이블 ${from}을(를) 이미 있는 ${to}에 합쳤습니다.` : `레이블 ${from} → ${to} 이름을 바꿨습니다.`);
     closeRenameForm(to);
-  } else if (e.target.id === 'search-form') e.preventDefault();
+  } else if (e.target.id === 'chat-form') { e.preventDefault(); withChat((c) => c.send()); }
+  else if (e.target.id === 'search-form') e.preventDefault();
   else if (e.target.id === 'find-form') { e.preventDefault(); searchChapter($('#find-input').value); }
   else if (e.target.id === 'bible-form') {
     e.preventDefault();

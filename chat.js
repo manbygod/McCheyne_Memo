@@ -345,7 +345,7 @@ export function createChat(deps) {
       systemInstruction: SYSTEM_INSTRUCTION,
       safetySettings: ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
         .map((name) => ({ category: ai.HarmCategory[name], threshold })),
-      generationConfig: { maxOutputTokens: 1500, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } }, // 생각(thinking) 끄기: 본문을 보고 답하는 질문엔 필요 없고 첫 글자까지 수십 초 걸리게 함
+      generationConfig: { maxOutputTokens: 1500, temperature: 0.4, thinkingConfig: { thinkingLevel: 'minimal' } }, // 생각(thinking) 최소화: 본문을 보고 답하는 질문엔 깊은 추론이 필요 없고 첫 글자까지 수십 초 걸리게 함 (이 모델은 thinkingBudget: 0 을 400 으로 거부함)
     });
     return model;
   }

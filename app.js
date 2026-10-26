@@ -757,7 +757,7 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-27b').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-27c').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
     books: () => state.books, memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
@@ -2097,6 +2097,20 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.target.id === 'chat-input' && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); e.target.form.requestSubmit(); }
+});
+
+/* 터치 기기: 키보드 위 "완료(✓)"로 질문 입력을 마치면 바로 보냄. ✓ 는 페이지 밖(시스템) 버튼이라 포커스만 빠지고 페이지에는 터치가 없다.
+   → 포커스가 빠진 뒤 0.4초 동안 아무 입력(터치·마우스·클릭·키·입력칸 재포커스)도 없을 때만 보냄.
+   VoiceOver 등 보조 기술이 다른 버튼을 실행할 때는 클릭이 따라오므로 보내지 않음. 마우스·키보드 기기는 해당 없음 */
+let chatDoneTimer = 0;
+const cancelChatDone = () => { clearTimeout(chatDoneTimer); chatDoneTimer = 0; };
+['pointerdown', 'mousedown', 'touchstart', 'click', 'keydown', 'focusin'].forEach((type) => document.addEventListener(type, cancelChatDone, true));
+document.addEventListener('focusout', (e) => {
+  const input = e.target;
+  if (input.id !== 'chat-input' || !matchMedia('(pointer: coarse)').matches || e.relatedTarget || input.readOnly) return; // 읽기 전용 = 이미 보내는 중 (보내기를 눌러 프로그램이 포커스를 뺀 경우)
+  if (!input.closest('dialog')?.open || !input.value.trim()) return;
+  cancelChatDone();
+  chatDoneTimer = setTimeout(() => { chatDoneTimer = 0; if (input.closest('dialog')?.open && input.value.trim() && !input.readOnly) input.form.requestSubmit(); }, 400);
 });
 
 document.addEventListener('focusin', (e) => { if (e.target.id === 'range-end') startRange(); });

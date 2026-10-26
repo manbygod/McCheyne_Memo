@@ -422,6 +422,7 @@ export function createChat(deps) {
     busy = true;
     $('#chat-send').disabled = true;
     input.readOnly = true; // 답이 다 나올 때까지 질문 글을 그대로 보여 주고 고치지 못하게 함 (읽기 전용이라 포커스·낭독은 가능)
+    if (document.activeElement === input && matchMedia('(pointer: coarse)').matches) input.blur(); // (키보드 사용자는 포커스를 입력칸에 그대로 둠) // 휴대폰에서 보내기 버튼을 눌러도 입력칸 포커스가 남아 키보드가 답변을 가리고 답변으로 포커스가 옮겨지지 않으므로, 보내는 즉시 키보드를 접음
     $('#chat-log').setAttribute('aria-busy', 'true');
     addMessage('user', question);
     const reply = addMessage('model', '답변을 작성하는 중…', 'pending');
@@ -484,6 +485,7 @@ export function createChat(deps) {
       input.value = ''; // 답변이 다 나온 뒤에 질문 글을 지움 (오류일 때는 남겨 두어 다시 보낼 수 있음)
       scrollToTop(reply.li, true); // 다 나온 뒤에는 답변 첫 줄로 부드럽게 스크롤하고
       reply.li.blur(); reply.li.focus({ preventScroll: true }); // 포커스도 다시 답변으로 (다시 포커스해야 스크린리더가 완성된 답변을 처음부터 읽음)
+      reply.li.scrollIntoView({ block: 'nearest' }); // 대화창 자체가 아래로 스크롤돼 있어 답변이 화면 밖이면 보이는 곳까지만 올림
       announce('답변이 완성되었습니다.'); // 답변 글은 포커스된 답변에서 읽으므로 알림은 짧게 (이중 낭독 방지)
     } catch (e) {
       console.error('[chat]', e);

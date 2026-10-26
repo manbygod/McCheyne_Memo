@@ -748,7 +748,7 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26h').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26l').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
     memos: () => state.memos, scopes: chatScopes, refOf, spanLabel,
@@ -1905,7 +1905,7 @@ const actions = {
   'passage-open': (el, e) => {
     const m = state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id);
     if (m?.passages.length > 1) { e.preventDefault(); openPassagePicker(m); } // 장을 고른 뒤에 이동
-    else el.closest('dialog').close();
+    else document.querySelectorAll('dialog[open]').forEach((d) => d.close()); // 본문으로 이동하면 아래에 깔린 챗봇 창 등 열린 팝업을 모두 닫음
   },
   'passage-go': () => document.querySelectorAll('dialog[open]').forEach((d) => d.close()), // 이동하면 열린 팝업을 모두 닫음
   'memo-edit': (el) => { el.closest('dialog')?.close(); editMemo(state.memos.find((x) => x.id === el.closest('[data-id]').dataset.id)); },
@@ -1915,6 +1915,15 @@ const actions = {
   'auth-toggle': toggleAuth,
   'chat-open': () => withChat((c) => c.open()),
   'chat-clear': () => withChat((c) => c.clear()),
+  'chat-ref-open': (el) => { // 답변에서 참고한 메모를 눌러 메모 읽기 팝업을 띄움 (챗봇 창 위에 겹쳐 열림)
+    const m = state.memos.find((x) => x.id === el.dataset.id);
+    if (m) openReadDialog(m); else toast('메모를 찾을 수 없습니다. 삭제되었을 수 있습니다.');
+  },
+  'chat-refs-toggle': (el) => { // 답변에 참고한 메모 목록 펼침/접힘
+    const open = el.getAttribute('aria-expanded') === 'true';
+    el.setAttribute('aria-expanded', String(!open));
+    document.getElementById(el.getAttribute('aria-controls')).hidden = open;
+  },
   'page-go': (el) => {
     state.page = Number(el.dataset.page);
     renderMemos();

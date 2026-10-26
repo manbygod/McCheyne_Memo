@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://content.googleapis.com https://www.google.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-10-26b">
+  <link rel="stylesheet" href="style.css?v=2026-10-26e">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -290,7 +290,7 @@
         <label class="field__label" for="chat-scope">참고할 본문</label>
         <select class="field__control" id="chat-scope"></select>
         <label class="check"><input type="checkbox" id="chat-memos" aria-describedby="chat-memos-note"> 내 메모를 참고해서 답하기</label>
-        <p class="chat__notice" id="chat-memos-note">켜면 관련 메모(최대 5개)가 AI 서비스(Google Gemini)로 전송됩니다. 무료 서비스에서는 입력 내용이 서비스 개선에 쓰일 수 있습니다. 창을 열 때마다 꺼진 상태로 시작합니다.</p>
+        <p class="chat__notice" id="chat-memos-note">관련 메모(최대 20개)가 AI 서비스(Google Gemini)로 전송됩니다. 무료 서비스에서는 입력 내용이 서비스 개선에 쓰일 수 있습니다. 창을 열 때마다 꺼진 상태로 시작합니다.</p>
       </div>
       <label class="field__label" for="chat-input">질문</label>
       <textarea class="field__control" id="chat-input" rows="3" maxlength="1000" aria-describedby="chat-hint"></textarea>
@@ -305,6 +305,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-10-26h"></script>
+  <script src="app.js?v=2026-10-26m"></script>
 </body>
 </html>

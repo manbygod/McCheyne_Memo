@@ -311,7 +311,10 @@ button.chip { cursor: pointer; color: inherit; }
 .chat__message--pending { color: var(--c-muted); }
 .chat__message--error { border-color: var(--c-danger); color: var(--c-danger); }
 .chat__message--hint { color: var(--c-muted); }
-.chat__refs { margin: 6px 0 0; font-size: .8rem; color: var(--c-muted); }
+.chat__refs-toggle { display: flex; width: fit-content; margin-top: 6px; font-size: .85rem; } /* 답변 글 아래 줄에 */
+.chat__refs { margin: 6px 0 0; padding-left: 1.4em; font-size: .85rem; color: var(--c-muted); }
+.chat__refs[hidden] { display: none; }
+.chat__ref-link { font: inherit; color: var(--c-primary); background: none; border: 0; padding: 6px 0; text-align: left; text-decoration: underline; cursor: pointer; }
 
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);

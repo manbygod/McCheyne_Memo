@@ -757,7 +757,7 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26v').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26za').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
     books: () => state.books, memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
@@ -1924,6 +1924,7 @@ const actions = {
   'auth-toggle': toggleAuth,
   'chat-open': () => withChat((c) => c.open()),
   'chat-clear': () => withChat((c) => c.clear()),
+  'chat-memo-day': (el) => withChat((c) => c.send(el.dataset.choice)), // "오늘 메모" 되묻기에서 고른 뜻으로 질문을 보냄
   'chat-ref-open': (el) => { // 답변에서 참고한 메모를 눌러 메모 읽기 팝업을 띄움 (챗봇 창 위에 겹쳐 열림)
     const m = state.memos.find((x) => x.id === el.dataset.id);
     if (m) openReadDialog(m); else toast('메모를 찾을 수 없습니다. 삭제되었을 수 있습니다.');

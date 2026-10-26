@@ -6,7 +6,7 @@
 const SDK = 'https://www.gstatic.com/firebasejs/11.10.0/'; // firebase-ai 는 11.x 부터 Gemini Developer API 를 지원 (app.js 의 Firebase 10.x 와 별도 앱으로 초기화)
 const DEFAULT_MODEL = 'gemini-flash-lite-latest'; // 이름이 고정된 모델은 종료되면 404 가 되므로 최신 Lite 별칭을 기본으로 사용 // data/firebase-config.json 의 chatModel 로 바꿀 수 있음
 const DAY_KEY = 'mccheyne.chat.day';
-export const LIMITS = { dailyQuestions: 30, questionChars: 1000, passageChars: 20000, spans: 12, memos: 20, memoChars: 12000, memoEach: 1200, bookMemos: 60, bookMemoChars: 24000, bookMemoMin: 300, historyTurns: 6 };
+export const LIMITS = { dailyQuestions: 30, questionChars: 1000, passageChars: 20000, spans: 12, memos: 60, memoChars: 24000, memoEach: 1200, memoMin: 300, historyTurns: 6 };
 
 export const SYSTEM_INSTRUCTION = [
   '당신은 "맥체인 성경읽기" 앱의 성경 읽기 도우미입니다.',
@@ -37,11 +37,85 @@ const STOP_TERMS = new Set(['메모', '관련', '대해', '정리', '요약', '�
 /** 질문에서 메모 검색용 낱말을 뽑음: 2글자 이상, 조사 한 글자를 뗀 형태도 함께 */
 export function searchTerms(query) {
   const words = String(query).toLowerCase().split(/[\s,.;:!?()"'“”‘’·]+/).filter((t) => t.length >= 2 && !STOP_TERMS.has(t));
-  return [...new Set(words.flatMap((t) => (t.length >= 3 ? [t, t.slice(0, -1)] : [t])))];
+  return [...new Set(words.flatMap((t) => {
+    const stem = t.replace(PARTICLES, '');
+    return [t, ...(t.length >= 3 ? [t.slice(0, -1)] : []), ...(stem !== t && stem.length >= 2 ? [stem] : [])];
+  }))];
 }
 
-/** "섭리에 관계된 메모들을 요약해 줘"처럼 지금 읽는 본문이 아니라 메모 전체를 주제로 묻는 질문인가 */
-export const isMemoTopicQuestion = (question) => /메모/.test(question) && !/(이|지금|현재|여기)\s*(장|본문|구절|절|말씀)|여기/.test(question);
+const PARTICLES = /(에서|에게|으로|이란|라는|들의|들을|들이|들|에|의|을|를|이|가|은|는|도|과|와|로)$/;
+/** 비슷한 뜻의 낱말 묶음 (신앙 용어). 질문 낱말이 묶음의 낱말과 겹치면 묶음 전체로 메모를 찾는다 */
+const SYNONYMS = [
+  ['섭리', '인도', '인도하심', '주권', '계획', '예정', '뜻', '경륜', '다스리'],
+  ['믿음', '신앙', '신뢰', '의지', '확신'],
+  ['기도', '간구', '간절', '구하', '부르짖'],
+  ['사랑', '긍휼', '자비', '은혜', '자애'],
+  ['은혜', '긍휼', '자비', '은총', '구원'],
+  ['구원', '구속', '속죄', '대속', '십자가', '속량'],
+  ['죄', '죄악', '허물', '범죄', '회개', '불의'],
+  ['회개', '뉘우', '돌이', '통회'],
+  ['용서', '사함', '사죄', '용납', '탕감'],
+  ['평안', '평강', '평화', '안식', '쉼', '위로'],
+  ['위로', '격려', '소망', '평안', '힘'],
+  ['소망', '희망', '기대', '약속'],
+  ['두려움', '두려', '불안', '걱정', '염려', '근심'],
+  ['감사', '찬양', '찬송', '경배', '예배', '영광'],
+  ['순종', '복종', '말씀대로', '준행'],
+  ['말씀', '계명', '율법', '교훈', '가르침', '진리'],
+  ['성령', '보혜사', '영', '성신', '임재'],
+  ['고난', '시련', '환난', '고통', '핍박', '연단'],
+  ['인내', '견디', '참음', '기다', '오래 참'],
+  ['지혜', '분별', '명철', '총명', '슬기'],
+  ['겸손', '낮아', '낮추', '온유', '교만'],
+  ['심판', '재판', '징계', '진노', '공의', '정의'],
+  ['약속', '언약', '맹세', '서약'],
+  ['예수', '그리스도', '메시아', '주님', '구주'],
+  ['하나님', '여호와', '주님', '아버지', '창조주'],
+  ['교회', '성도', '공동체', '지체', '모임'],
+  ['가정', '가족', '부모', '자녀', '부부', '결혼'],
+  ['돈', '재물', '물질', '재산', '부', '헌금', '십일조'],
+  ['전도', '선교', '복음', '증거', '증인', '전파'],
+  ['부활', '살아나', '영생', '다시 사', '재림'],
+  ['시험', '유혹', '미혹', '시험'],
+  ['기쁨', '즐거', '기뻐', '환희', '행복'],
+  ['생명', '살리', '영생', '생수', '목숨'],
+  ['인도', '길', '이끄', '인도하'],
+];
+/** 질문 낱말과 겹치는 묶음의 낱말을 더해 넓힘: 낱말이 묶음의 낱말을 포함하거나 그 반대일 때 (한 글자 낱말은 오탐이 많아 묶음의 첫머리와 같을 때만) */
+export function expandTerms(terms) {
+  const out = new Set(terms);
+  for (const group of SYNONYMS) {
+    const hit = terms.some((t) => group.some((w) => (w.length >= 2 ? t.includes(w) || w.includes(t) : t === w)));
+    if (hit) group.forEach((w) => w.length >= 2 && out.add(w)); // 한 글자 낱말은 아무 글에나 들어 있어 더하지 않음
+  }
+  return [...out];
+}
+
+/** "섭리에 관계된 메모들을 요약해 줘"처럼 지금 읽는 본문이 아니라 메모 전체를 주제로 묻는 질문인가.
+    "오늘의 말씀·읽기표 본문 메모"처럼 특정 본문을 가리키면 주제 질문이 아니다 (본문 장에 붙은 메모를 먼저 고르기 위해) */
+export const isMemoTopicQuestion = (question) => /메모/.test(question) && !/(이|지금|현재|여기|오늘|오늘의|읽기표)\s*(장|본문|구절|절|말씀)|여기|읽기표|오늘/.test(question);
+
+/** "오늘/어제/그제/10월 25일 메모 요약"처럼 "그날 쓴 메모"인지 "그날 읽기표 본문의 메모"인지 알 수 없는 질문인가.
+    → {intent: 'written'(그날 쓴 메모) | 'plan'(그날 읽기표 본문의 메모) | 'ask'(되물어야 함), dates} | null(해당 없음).
+    미래 날짜(내일·모레)는 쓴 메모가 있을 수 없으니 읽기표 기준(plan) */
+export function memoDayIntent(question, today) {
+  if (!/메모/.test(question)) return null;
+  const dates = questionDates(question, today);
+  if (!dates.length) return null;
+  if (dates.some((d) => d > today)) return { intent: 'plan', dates };
+  if (/(쓴|쓰|작성|적은|적었|수정|만든|남긴|등록)/.test(question)) return { intent: 'written', dates };
+  if (/읽기표|본문|말씀|구절|읽|\d+\s*(장|편)|[이저]\s*장|여기/.test(question)) return { intent: 'plan', dates };
+  return { intent: 'ask', dates };
+}
+
+/** 로컬 날짜(YYYY-MM-DD)가 isos 중 하나인 날 작성했거나 수정한 메모 (저장된 시각은 UTC 이므로 로컬 날짜로 바꿔 비교) */
+export function memosOnDates(memos, isos) {
+  const day = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+  return memos.filter((m) => isos.includes(day(m.createdAt)) || isos.includes(day(m.updatedAt)));
+}
+
+/** 되묻기·안내에 쓰는 날짜 이름: 오늘은 "오늘", 그 밖에는 ISO 날짜 */
+export const dayLabel = (dates, today) => dates.map((d) => (d === today ? '오늘' : d)).join(', ');
 
 /** 성경 책 약칭 (대한성서공회 표기). 한 글자와 일상어와 겹치는 약칭은 "시 23편"·"요 3:16"처럼 뒤에 숫자+장/편/절이 있을 때만 인정 */
 const ABBR = { gen: ['창'], exo: ['출'], lev: ['레'], num: ['민'], deu: ['신'], jos: ['수'], jdg: ['삿'], rut: ['룻'], '1sa': ['삼상'], '2sa': ['삼하'], '1ki': ['왕상'], '2ki': ['왕하'], '1ch': ['대상'], '2ch': ['대하'], ezr: ['스'], neh: ['느'], est: ['에'], job: ['욥'], psa: ['시'], pro: ['잠'], ecc: ['전'], sng: ['아'], isa: ['사'], jer: ['렘'], lam: ['애'], ezk: ['겔'], dan: ['단'], hos: ['호'], jol: ['욜'], amo: ['암'], oba: ['옵'], jon: ['욘'], mic: ['미'], nam: ['나'], hab: ['합'], zep: ['습'], hag: ['학'], zec: ['슥'], mal: ['말'], mat: ['마'], mrk: ['막'], luk: ['눅'], jhn: ['요'], act: ['행'], rom: ['롬'], '1co': ['고전'], '2co': ['고후'], gal: ['갈'], eph: ['엡'], php: ['빌'], col: ['골'], '1th': ['살전'], '2th': ['살후'], '1ti': ['딤전'], '2ti': ['딤후'], tit: ['딛'], phm: ['몬'], heb: ['히'], jas: ['약'], '1pe': ['벧전'], '2pe': ['벧후'], '1jn': ['요일'], '2jn': ['요이'], '3jn': ['요삼'], jud: ['유'], rev: ['계'] };
@@ -87,24 +161,30 @@ export function generalSummaryNote({ question, books, spans = [], hasPassages = 
 /** 메모에 그 책의 구절이 하나라도 붙어 있는가 */
 export const memoInBooks = (m, bookIds) => m.passages.some((p) => bookIds.includes(p.bookId));
 
-/** 챗봇에 보낼 메모 고르기. 현재 본문 장과 겹치는 메모 → 질문 낱말이 들어간 메모 → 나머지는 updatedAt 최신순.
-    topic(메모 주제 질문)이면 현재 장 가산점을 빼서 낱말이 맞는 메모가 먼저 오게 한다.
-    bookIds(질문에 이름이 나온 책)가 있으면 그 책 구절이 붙은 메모만 골라, 메모 수·글자 한도를 넓혀 더 많이 담는다.
-    메모의 passages[].text(성경 본문)는 보내지 않는다. → [{n, id, ref, labels, date, content}] */
-export function selectMemosForChat(memos, { chapters = [], query = '', topic = false, bookIds = [], refOf = () => '', max = LIMITS.memos, maxChars = LIMITS.memoChars } = {}) {
-  const byBook = bookIds.length > 0;
-  const inBook = byBook ? memos.filter((m) => memoInBooks(m, bookIds)).length : 0;
-  if (inBook) { max = Math.min(inBook, Math.max(max, LIMITS.bookMemos)); maxChars = Math.max(maxChars, LIMITS.bookMemoChars); }
-  const each = inBook ? Math.min(LIMITS.memoEach, Math.max(LIMITS.bookMemoMin, Math.floor(maxChars / max))) : LIMITS.memoEach; // 책 메모가 많으면 한 메모당 글자를 줄여 더 많이 담음
+/** 질문이 가리키는 범위(본문 장 chapters 또는 책 bookIds)에 구절이 붙은 메모만. 범위에 없는 메모는 최근 메모라도 채우지 않는다 */
+export function memosForScope(memos, { chapters = [], bookIds = [] } = {}) {
   const keys = new Set(chapters.map((c) => `${c.bookId}:${c.chapter}`));
-  const terms = searchTerms(query);
+  return memos.filter((m) => memoInBooks(m, bookIds) || m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)));
+}
+
+/** 챗봇에 보낼 메모 고르기. 현재 본문 장과 겹치는 메모 → 질문 낱말이 들어간 메모 → 나머지는 updatedAt 최신순.
+    fill=false 면 점수가 0인(관련 없는) 메모는 최근 메모라도 채우지 않는다 (범위가 정해진 pool 이면 fill 은 상관없음).
+    topic(메모 주제 질문)이면 현재 장 가산점을 빼서 낱말이 맞는 메모가 먼저 오게 한다.
+    질문 낱말은 비슷한 뜻의 낱말(SYNONYMS)까지 넓혀 찾는다. 메모가 많으면 한 메모당 글자를 줄여 한도 안에 더 많이 담는다.
+    메모의 passages[].text(성경 본문)는 보내지 않는다. → [{n, id, ref, labels, date, content}] */
+export function selectMemosForChat(memos, { chapters = [], query = '', topic = false, bookIds = [], refOf = () => '', max = LIMITS.memos, maxChars = LIMITS.memoChars, fill = true } = {}) {
+  const byBook = bookIds.length > 0;
+  const keys = new Set(chapters.map((c) => `${c.bookId}:${c.chapter}`));
+  const terms = expandTerms(searchTerms(query));
   const ranked = memos
     .map((m) => {
       const hay = `${m.content}\n${m.labels.join(' ')}`.toLowerCase();
       const score = (!topic && m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)) ? 4 : 0) + (byBook && memoInBooks(m, bookIds) ? 6 : 0) + Math.min(terms.filter((t) => hay.includes(t)).length, 3);
       return { m, score };
     })
+    .filter(({ score }) => fill || score > 0) // fill=false 면 점수가 있는(관련 있는) 메모만 — 관계 없는 최근 메모로 채우지 않음
     .sort((a, b) => b.score - a.score || b.m.updatedAt.localeCompare(a.m.updatedAt));
+  const each = Math.min(LIMITS.memoEach, Math.max(LIMITS.memoMin, Math.floor(maxChars / Math.max(1, Math.min(max, ranked.length))))); // 보낼 메모가 많으면 한 메모당 글자를 줄여 더 많이 담음
   const out = [];
   let left = maxChars;
   for (const { m } of ranked) {
@@ -149,7 +229,9 @@ export function chooseSpans({ mode, asked = [], reader = null, selectedDay = [],
 }
 
 /** 메모 묶음 첫 줄 안내. memoBooks: {names, total} — 질문에 나온 책 이름과 그 책 구절이 붙은 메모 수 */
-export function memoHeader({ memoTotal, count, memoBooks = null }) {
+export function memoHeader({ memoTotal, count, memoBooks = null, memoDay = null, memoScope = null }) {
+  if (memoScope) return `전체 메모 ${memoTotal}개 중 ${escapeTags(memoScope.label)}에 구절이 붙은 메모는 ${memoScope.total}개입니다. ${memoScope.total > count ? `그중 ${count}개만 제공합니다.` : '모두 제공합니다.'}`;
+  if (memoDay) return `전체 메모 ${memoTotal}개 중 ${memoDay.label}에 작성하거나 수정한 메모는 ${memoDay.total}개입니다. ${memoDay.total > count ? `그중 ${count}개만 제공합니다.` : '모두 제공합니다.'}`;
   if (memoBooks?.names.length) {
     const names = memoBooks.names.map(escapeTags).join(', ');
     if (!memoBooks.total) return `전체 메모 ${memoTotal}개 중 ${names}의 구절이 붙은 메모는 없습니다. 아래 ${count}개는 낱말이 비슷한 메모이거나 최근 메모입니다.`;
@@ -160,7 +242,7 @@ export function memoHeader({ memoTotal, count, memoBooks = null }) {
 
 /** 이번 질문에 붙일 전체 텍스트 (본문·메모는 구분 태그 안에 데이터로만 넣음).
     plan: {today, items:[{date, source:'question'|'selected', refs}]} — 읽기표 구절 이름만, 본문 범위와 상관없이 항상 */
-export function buildUserText({ question, plan = null, passageNote = '', passages = [], focus = [], memos = [], memoTotal = memos.length, memoBooks = null, generalNote = '', translation = '' }) {
+export function buildUserText({ question, plan = null, passageNote = '', passages = [], focus = [], memos = [], memoTotal = memos.length, memoBooks = null, memoDay = null, memoScope = null, generalNote = '', translation = '' }) {
   const parts = [];
   if (plan?.items?.length) {
     parts.push([`[읽기표] 오늘은 ${plan.today}.`, ...plan.items.map((i) =>
@@ -172,7 +254,7 @@ export function buildUserText({ question, plan = null, passageNote = '', passage
     if (focus.length) parts.push(`사용자가 선택한 절: ${focus.join(', ')}`);
   }
   if (memos.length) {
-    parts.push(`<user_memos>\n${memoHeader({ memoTotal, count: memos.length, memoBooks })}\n\n${memos.map((m) => `[메모 ${m.n}] ${escapeTags(m.ref)} · ${m.date}${m.labels.length ? ` · 레이블: ${escapeTags(m.labels.join(', '))}` : ''}\n${escapeTags(m.content)}`).join('\n\n')}\n</user_memos>`);
+    parts.push(`<user_memos>\n${memoHeader({ memoTotal, count: memos.length, memoBooks, memoDay, memoScope })}\n\n${memos.map((m) => `[메모 ${m.n}] ${escapeTags(m.ref)} · ${m.date}${m.labels.length ? ` · 레이블: ${escapeTags(m.labels.join(', '))}` : ''}\n${escapeTags(m.content)}`).join('\n\n')}\n</user_memos>`);
   }
   if (generalNote) parts.push(generalNote);
   parts.push(`질문: ${question}`);
@@ -293,7 +375,19 @@ export function createChat(deps) {
     return passages;
   }
 
-  async function send() {
+  /** 되묻기 안내 글(버튼 두 개)을 대화창에 추가. 질문은 입력창에 그대로 두고, 고르면 send(choice)로 이어감 */
+  function askMemoDay(label) {
+    $('#chat-log').querySelector('.chat__message--ask')?.remove();
+    const { li } = addMessage('notice', `"${label} 메모"가 어떤 뜻인가요?`, 'ask');
+    li.setAttribute('tabindex', '-1');
+    li.append(h('span', { class: 'chat__choices' },
+      h('button', { type: 'button', class: 'btn btn--ghost', 'data-action': 'chat-memo-day', 'data-choice': 'written' }, `${label}에 쓴 메모`),
+      h('button', { type: 'button', class: 'btn btn--ghost', 'data-action': 'chat-memo-day', 'data-choice': 'plan' }, `${label} 읽기표 본문의 메모`)));
+    announce(`${label} 메모가 ${label}에 쓴 메모인지, ${label} 읽기표 본문의 메모인지 골라 주세요.`);
+    li.focus();
+  }
+
+  async function send(choice = '') {
     if (busy) return;
     const input = $('#chat-input');
     const question = input.value.trim();
@@ -303,6 +397,18 @@ export function createChat(deps) {
     const box = $('#chat-memos');
     if (!box.checked && /메모/.test(question) && deps.memos().length
       && window.confirm('질문에 "메모"가 들어 있습니다.\n내 메모를 함께 AI(Google Gemini)로 보낼까요?\n(무료 서비스에서는 입력 내용이 서비스 개선에 쓰일 수 있습니다.)')) box.checked = true;
+    $('#chat-log').querySelector('.chat__message--ask')?.remove();
+    const day = box.checked ? memoDayIntent(question, deps.today()) : null;
+    const intent = day && (choice || day.intent);
+    const label = day ? dayLabel(day.dates, deps.today()) : '';
+    if (intent === 'ask') { askMemoDay(label); return; }
+    const writtenToday = intent === 'written' ? memosOnDates(deps.memos(), day.dates) : null; // 그날 쓴 메모만 묻는 경우
+    if (writtenToday && !writtenToday.length) {
+      const msg = `${label}에 작성하거나 수정한 메모가 없습니다.`;
+      addMessage('notice', msg);
+      announce(msg);
+      return;
+    }
 
     busy = true;
     $('#chat-send').disabled = true;
@@ -314,11 +420,22 @@ export function createChat(deps) {
       const mode = $('#chat-scope').value;
       const sc = deps.scopes();
       const asked = questionDates(question, deps.today());
-      const { spans, source } = chooseSpans({ mode, asked, reader: sc.reader, selectedDay: sc.today, spansOn: deps.spansOn });
+      const { spans, source } = writtenToday ? { spans: [], source: 'none' } : chooseSpans({ mode, asked, reader: sc.reader, selectedDay: sc.today, spansOn: deps.spansOn }); // 오늘 쓴 메모만 물으면 읽기표 본문은 보내지 않음
       const passages = await gatherPassages(spans);
       const allMemos = deps.memos();
-      const bookIds = box.checked ? booksInQuestion(question, deps.books()) : [];
-      const memos = box.checked ? selectMemosForChat(allMemos, { chapters: spans, query: question, topic: isMemoTopicQuestion(question), bookIds, refOf: deps.refOf }) : [];
+      const bookIds = box.checked && !writtenToday ? booksInQuestion(question, deps.books()) : [];
+      const strict = box.checked && !writtenToday && (bookIds.length > 0 || asked.length > 0); // 날짜(읽기표 본문)나 책 이름을 말했으면 그 범위의 메모만
+      const pool = writtenToday ?? (strict ? memosForScope(allMemos, { chapters: spans, bookIds }) : allMemos);
+      const memoScope = strict ? { label: [...(asked.length ? [`${dayLabel(asked, deps.today())} 읽기표 본문`] : []), ...bookIds.map((id) => deps.books().find((b) => b.id === id)?.ko ?? id)].join(', '), total: pool.length } : null;
+      const memos = box.checked ? selectMemosForChat(pool, { chapters: spans, query: question, topic: !!writtenToday || (isMemoTopicQuestion(question) && !asked.length), bookIds: writtenToday ? [] : bookIds, refOf: deps.refOf, fill: !!writtenToday || strict }) : [];
+      if (box.checked && !memos.length && /메모/.test(question)) { // 관련 메모가 없으면 AI를 부르지 않고 알림
+        const msg = memoScope ? `${memoScope.label}에 구절이 붙은 메모가 없습니다.` : '질문과 관련된 메모를 찾지 못했습니다.';
+        reply.li.classList.remove('chat__message--pending');
+        reply.body.textContent = msg;
+        announce(msg);
+        reply.li.focus({ preventScroll: true });
+        return;
+      }
       const memoBooks = bookIds.length ? { names: bookIds.map((id) => deps.books().find((b) => b.id === id)?.ko ?? id), total: allMemos.filter((m) => memoInBooks(m, bookIds)).length } : null;
       const sending = [...(source === 'question' && passages.length ? [`질문 속 날짜(${asked.join(', ')})의 읽기표 본문`] : []), ...(memos.length ? [`메모 ${memos.length}개`] : [])];
       const note = `${box.checked && !memos.length ? '참고할 메모가 없습니다. ' : ''}${sending.length ? `함께 보냅니다: ${sending.join(', ')}. ` : ''}답변을 작성하는 중…`;
@@ -328,7 +445,7 @@ export function createChat(deps) {
       const passageNote = { reader: '아래 <passage>는 사용자가 지금 읽고 있는 장입니다.',
         question: '아래 <passage>는 질문에서 말한 날짜의 읽기표 본문이며 각 제목 끝에 날짜가 적혀 있습니다.',
         selected: `아래 <passage>는 앱에서 선택한 날짜 ${deps.date()}의 읽기표 본문이며 각 제목 끝에 날짜가 적혀 있습니다.`, none: '' }[source];
-      const text = buildUserText({ question, plan, passageNote, passages, focus: source === 'reader' ? (sc.reader?.[0].focus ?? []) : [], memos, memoTotal: allMemos.length, memoBooks, generalNote: generalSummaryNote({ question, books: deps.books(), spans, hasPassages: passages.length > 0 }), translation: deps.translation() });
+      const text = buildUserText({ question, plan, passageNote, passages, focus: source === 'reader' ? (sc.reader?.[0].focus ?? []) : [], memos, memoTotal: allMemos.length, memoBooks, memoDay: writtenToday ? { label, total: writtenToday.length } : null, memoScope, generalNote: generalSummaryNote({ question, books: deps.books(), spans, hasPassages: passages.length > 0 }), translation: deps.translation() });
       const m = await getModel();
       await ensureAppCheckToken();
       const result = await m.generateContentStream({ contents: [...historyContents(history), { role: 'user', parts: [{ text }] }] });

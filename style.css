@@ -313,6 +313,8 @@ button.chip { cursor: pointer; color: inherit; }
 .chat__message--pending { color: var(--c-muted); }
 .chat__message--error { border-color: var(--c-danger); color: var(--c-danger); }
 .chat__message--hint { color: var(--c-muted); }
+.chat__message--ask { justify-self: start; border: 1px solid var(--c-border); background: var(--c-bg); }
+.chat__choices { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .chat__refs-toggle { display: flex; width: fit-content; margin-top: 6px; font-size: .85rem; } /* 답변 글 아래 줄에 */
 .chat__refs { margin: 6px 0 0; padding-left: 1.4em; font-size: .85rem; color: var(--c-muted); }
 .chat__refs[hidden] { display: none; }

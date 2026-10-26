@@ -735,23 +735,32 @@ function chatScopes() {
   const reader = parseRoute().name === 'reader' && state.chapter
     ? [{ bookId: state.chapter.bookId, chapter: state.chapter.ch, from: null, to: null, focus: [...state.selected].sort((a, b) => a - b) }]
     : null;
-  const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
-  const today = day.flatMap((t) => [].concat(t ?? [])).map(normalizeReading).flatMap(readingSpans).filter((s) => bookById(s.bookId));
-  return { reader, today };
+  return { reader, today: planSpansOn(state.date) };
 }
+
+/** 날짜의 맥체인 읽기표 → 장 단위 구간 (제목에 날짜를 붙일 수 있게 date 포함) */
+const planSpansOn = (iso) => (state.plan.days[planKey(iso, state.plan)] ?? [])
+  .flatMap((t) => [].concat(t ?? [])).map(normalizeReading).flatMap(readingSpans)
+  .filter((s) => bookById(s.bookId)).map((s) => ({ ...s, date: iso }));
+
+/** 날짜의 맥체인 읽기표 → 구절 이름 목록 (글은 포함하지 않음, 읽기표에 없는 날짜는 빈 배열) */
+const planRefsOn = (iso) => (state.plan.days[planKey(iso, state.plan)] ?? [])
+  .flatMap((t) => [].concat(t ?? [])).map(normalizeReading).filter((r) => bookById(r.book))
+  .map((r) => formatReading(r, bookById(r.book), state.lang));
 
 function spanLabel(s) {
   const name = bookName(bookById(s.bookId), state.lang);
-  if (!s.from && !s.to) return `${name} ${s.chapter}`;
-  return `${name} ${s.chapter}:${s.from ?? 1}-${s.to ?? (state.lang === 'en' ? 'end' : '끝')}`;
+  const date = s.date ? ` (${s.date})` : '';
+  if (!s.from && !s.to) return `${name} ${s.chapter}${date}`;
+  return `${name} ${s.chapter}:${s.from ?? 1}-${s.to ?? (state.lang === 'en' ? 'end' : '끝')}${date}`;
 }
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26l').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26o').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
-    memos: () => state.memos, scopes: chatScopes, refOf, spanLabel,
+    memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
     loadChapter: (bookId, ch, lang) => loadChapter(bookId, ch, lang, null), // 가져온 개역개정·NIV 는 보내지 않도록 번들 본문만 (version=null)
     translation: () => (state.lang === 'en' ? 'Berean Standard Bible (BSB)' : '개역한글(1961)'),
     prepare: (dialog) => { delete dialog.dataset.vv; moveDialog(dialog, 0, 0); },

@@ -211,6 +211,8 @@ export function createChat(deps) {
 
   const announce = (msg) => { const s = $('#chat-status'); s.textContent = ''; setTimeout(() => { s.textContent = msg; }, 50); };
   const scrollLog = () => { const log = $('#chat-log'); log.scrollTop = log.scrollHeight; };
+  /** 대화창 안에서 el 의 윗부분이 맨 위에 오도록 스크롤 (답변 첫 줄부터 읽게) */
+  const scrollToTop = (el) => { const log = $('#chat-log'); log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - log.clientTop - (parseFloat(getComputedStyle(log).paddingTop) || 0); };
 
   function renderLeft() {
     const { left } = dailyUsage(readDay(), deps.today());
@@ -321,6 +323,7 @@ export function createChat(deps) {
       await ensureAppCheckToken();
       const result = await m.generateContentStream({ contents: [...historyContents(history), { role: 'user', parts: [{ text }] }] });
       let answer = '';
+      let scrolled = false;
       for await (const chunk of result.stream) {
         let piece = '';
         try { piece = chunk.text(); } catch { /* 안전 필터로 막힌 조각 */ }
@@ -328,7 +331,7 @@ export function createChat(deps) {
         answer += piece;
         reply.body.textContent = answer;
         reply.li.classList.remove('chat__message--pending');
-        scrollLog();
+        if (!scrolled) { scrolled = true; scrollToTop(reply.li); } // 첫 글자가 나오면 답변 첫 줄로. 이후 글이 늘어나도 따라 내려가지 않음
       }
       if (!answer.trim()) throw Object.assign(new Error('empty response'), { name: 'ChatBlocked' });
       history.push({ role: 'user', text: question }, { role: 'model', text: answer });
@@ -347,6 +350,7 @@ export function createChat(deps) {
       reply.li.classList.remove('chat__message--pending');
       reply.li.classList.add('chat__message--error');
       reply.body.textContent = msg;
+      scrollToTop(reply.li);
       announce(msg);
     } finally {
       busy = false;

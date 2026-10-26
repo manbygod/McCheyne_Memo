@@ -757,7 +757,7 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26q').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26r').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
     books: () => state.books, memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
@@ -1932,6 +1932,10 @@ const actions = {
     const open = el.getAttribute('aria-expanded') === 'true';
     el.setAttribute('aria-expanded', String(!open));
     document.getElementById(el.getAttribute('aria-controls')).hidden = open;
+    if (!open) { // 펼치면 버튼이 대화창 맨 위로 오고 아래에 링크 목록이 보이도록
+      const log = el.closest('.chat__log');
+      log.scrollTop += el.getBoundingClientRect().top - log.getBoundingClientRect().top - log.clientTop - (parseFloat(getComputedStyle(log).paddingTop) || 0);
+    }
   },
   'page-go': (el) => {
     state.page = Number(el.dataset.page);

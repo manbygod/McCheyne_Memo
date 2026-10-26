@@ -136,6 +136,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 }
 .btn--primary { background: var(--c-primary); color: var(--c-primary-text); border-color: var(--c-primary); }
 .btn--ghost { background: transparent; }
+.btn--shaded { background: linear-gradient(180deg, color-mix(in srgb, var(--c-primary) 82%, #fff), var(--c-primary) 55%, color-mix(in srgb, var(--c-primary) 82%, #000)); box-shadow: 0 2px 4px rgba(0, 0, 0, .3); } /* 음영 바탕: 글자와 배경 대비를 높임 */
 .btn--danger { color: var(--c-danger); }
 @media (pointer: coarse) { .btn--desktop-only { display: none; } } /* 터치 기기(앱)에서는 숨김 */
 
@@ -294,6 +295,7 @@ button.chip { cursor: pointer; color: inherit; }
 .form__actions .btn[data-action="dialog-close"], .form__actions .btn[type="submit"] { min-width: 7rem; } /* 팝업의 닫기·확인·취소·저장: 누르기 쉽도록 글자 폭만 차지하던 약 57px의 두 배 */
 /* 절의 메모 목록: 메모마다 본문·수정·공유·삭제·닫기 다섯 버튼을 한 줄에 같은 폭으로 */
 .form__actions.form__actions--fifth .btn { flex: 0 0 calc((100% - 32px) / 5); min-width: 0; padding-inline: 4px; }
+.form__actions.form__actions--chat .btn[data-action="dialog-close"], .form__actions.form__actions--chat .btn[type="submit"] { min-width: 4.5rem; } /* 질문 창: 대화 지우기와 한 줄에 놓이도록 닫기·보내기 폭을 줄임 */
 .form__actions--compact { justify-content: flex-start; } /* 메모 읽기: 본문·수정·공유·삭제·닫기 다섯 버튼을 한 줄에 */
 .form__actions.form__actions--compact .btn[data-action] { flex: 1 1 0; min-width: 0; padding-inline: 4px; }
 

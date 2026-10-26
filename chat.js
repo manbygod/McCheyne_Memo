@@ -223,7 +223,7 @@ export function createChat(deps) {
     const log = $('#chat-log');
     log.querySelector('.chat__message--hint')?.remove();
     const body = h('span', { class: 'chat__text' }, text);
-    const li = h('li', { class: `chat__message chat__message--${role}${extra ? ` chat__message--${extra}` : ''}` },
+    const li = h('li', { class: `chat__message chat__message--${role}${extra ? ` chat__message--${extra}` : ''}`, ...(role === 'model' && { tabindex: '-1' }) }, // 답변 글에 프로그램으로 포커스를 줄 수 있게
       h('span', { class: 'visually-hidden' }, role === 'user' ? '나: ' : role === 'model' ? 'AI: ' : '안내: '), body);
     log.append(li);
     scrollLog();
@@ -331,7 +331,8 @@ export function createChat(deps) {
         answer += piece;
         reply.body.textContent = answer;
         reply.li.classList.remove('chat__message--pending');
-        if (!scrolled) { scrolled = true; scrollToTop(reply.li); } // 첫 글자가 나오면 답변 첫 줄로. 이후 글이 늘어나도 따라 내려가지 않음
+        if (!scrolled) { scrolled = true; reply.li.focus({ preventScroll: true }); } // 첫 글자가 나오면 답변으로 포커스를 옮기고
+        scrollLog(); // 글이 늘어날 때마다 맨 아래를 따라감
       }
       if (!answer.trim()) throw Object.assign(new Error('empty response'), { name: 'ChatBlocked' });
       history.push({ role: 'user', text: question }, { role: 'model', text: answer });
@@ -343,7 +344,9 @@ export function createChat(deps) {
           h('ul', { class: 'chat__refs', id: listId, hidden: true }, memos.map((x) => h('li', {},
             h('button', { type: 'button', class: 'chat__ref-link', 'data-action': 'chat-ref-open', 'data-id': x.id, 'aria-haspopup': 'dialog' }, `[메모 ${x.n}] ${x.ref} (${x.date})`)))));
       }
-      announce(`AI 답변: ${answer}`); // 스트리밍 중에는 읽지 않고, 완성된 뒤 한 번만 알림
+      scrollToTop(reply.li); // 다 나온 뒤에는 답변 첫 줄로 스크롤하고
+      reply.li.blur(); reply.li.focus({ preventScroll: true }); // 포커스도 다시 답변으로 (다시 포커스해야 스크린리더가 완성된 답변을 처음부터 읽음)
+      announce('답변이 완성되었습니다.'); // 답변 글은 포커스된 답변에서 읽으므로 알림은 짧게 (이중 낭독 방지)
     } catch (e) {
       console.error('[chat]', e);
       const msg = chatErrorMessage(e, navigator.onLine);
@@ -352,12 +355,12 @@ export function createChat(deps) {
       reply.body.textContent = msg;
       scrollToTop(reply.li);
       announce(msg);
+      reply.li.focus({ preventScroll: true });
     } finally {
       busy = false;
       $('#chat-send').disabled = false;
       $('#chat-log').removeAttribute('aria-busy');
       renderLeft();
-      input.focus();
     }
   }
 

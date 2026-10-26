@@ -161,25 +161,26 @@ export function generalSummaryNote({ question, books, spans = [], hasPassages = 
 /** 메모에 그 책의 구절이 하나라도 붙어 있는가 */
 export const memoInBooks = (m, bookIds) => m.passages.some((p) => bookIds.includes(p.bookId));
 
+/** 메모의 구절이 본문 구간(책·장·절 범위) 안에 하나라도 있는가. 구간에 from/to 가 없으면 장 전체 */
+export const memoInSpans = (m, spans) => m.passages.some((p) => spans.some((s) => s.bookId === p.bookId && s.chapter === p.chapter && p.verses.some((n) => inSpan(n, s))));
+
 /** 질문이 가리키는 범위(본문 장 chapters 또는 책 bookIds)에 구절이 붙은 메모만. 범위에 없는 메모는 최근 메모라도 채우지 않는다 */
 export function memosForScope(memos, { chapters = [], bookIds = [] } = {}) {
-  const keys = new Set(chapters.map((c) => `${c.bookId}:${c.chapter}`));
-  return memos.filter((m) => memoInBooks(m, bookIds) || m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)));
+  return memos.filter((m) => memoInBooks(m, bookIds) || memoInSpans(m, chapters));
 }
 
-/** 챗봇에 보낼 메모 고르기. 현재 본문 장과 겹치는 메모 → 질문 낱말이 들어간 메모 → 나머지는 updatedAt 최신순.
+/** 챗봇에 보낼 메모 고르기. 현재 본문 구절 범위와 겹치는 메모 → 질문 낱말이 들어간 메모 → 나머지는 updatedAt 최신순.
     fill=false 면 점수가 0인(관련 없는) 메모는 최근 메모라도 채우지 않는다 (범위가 정해진 pool 이면 fill 은 상관없음).
     topic(메모 주제 질문)이면 현재 장 가산점을 빼서 낱말이 맞는 메모가 먼저 오게 한다.
     질문 낱말은 비슷한 뜻의 낱말(SYNONYMS)까지 넓혀 찾는다. 메모가 많으면 한 메모당 글자를 줄여 한도 안에 더 많이 담는다.
     메모의 passages[].text(성경 본문)는 보내지 않는다. → [{n, id, ref, labels, date, content}] */
 export function selectMemosForChat(memos, { chapters = [], query = '', topic = false, bookIds = [], refOf = () => '', max = LIMITS.memos, maxChars = LIMITS.memoChars, fill = true } = {}) {
   const byBook = bookIds.length > 0;
-  const keys = new Set(chapters.map((c) => `${c.bookId}:${c.chapter}`));
   const terms = expandTerms(searchTerms(query));
   const ranked = memos
     .map((m) => {
       const hay = `${m.content}\n${m.labels.join(' ')}`.toLowerCase();
-      const score = (!topic && m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)) ? 4 : 0) + (byBook && memoInBooks(m, bookIds) ? 6 : 0) + Math.min(terms.filter((t) => hay.includes(t)).length, 3);
+      const score = (!topic && memoInSpans(m, chapters) ? 4 : 0) + (byBook && memoInBooks(m, bookIds) ? 6 : 0) + Math.min(terms.filter((t) => hay.includes(t)).length, 3);
       return { m, score };
     })
     .filter(({ score }) => fill || score > 0) // fill=false 면 점수가 있는(관련 있는) 메모만 — 관계 없는 최근 메모로 채우지 않음

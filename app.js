@@ -757,7 +757,7 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26za').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26zb').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
     books: () => state.books, memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,

@@ -757,10 +757,10 @@ function spanLabel(s) {
 
 let chatPromise = null;
 function withChat(run) {
-  chatPromise ??= import('./chat.js?v=2026-10-26o').then((m) => m.createChat({
+  chatPromise ??= import('./chat.js?v=2026-10-26q').then((m) => m.createChat({
     $, h, mount, toast, cfg: state.fbCfg,
     user: () => state.user, lang: () => state.lang, date: () => state.date, today: () => toISODate(),
-    memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
+    books: () => state.books, memos: () => state.memos, scopes: chatScopes, planRefs: planRefsOn, spansOn: planSpansOn, refOf, spanLabel,
     loadChapter: (bookId, ch, lang) => loadChapter(bookId, ch, lang, null), // 가져온 개역개정·NIV 는 보내지 않도록 번들 본문만 (version=null)
     translation: () => (state.lang === 'en' ? 'Berean Standard Bible (BSB)' : '개역한글(1961)'),
     prepare: (dialog) => { delete dialog.dataset.vv; moveDialog(dialog, 0, 0); },

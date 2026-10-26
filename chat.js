@@ -345,10 +345,16 @@ export function createChat(deps) {
       systemInstruction: SYSTEM_INSTRUCTION,
       safetySettings: ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
         .map((name) => ({ category: ai.HarmCategory[name], threshold })),
-      generationConfig: { maxOutputTokens: 1500, temperature: 0.4 },
+      generationConfig: { maxOutputTokens: 1500, temperature: 0.4, thinkingConfig: { thinkingBudget: 0 } }, // 생각(thinking) 끄기: 본문을 보고 답하는 질문엔 필요 없고 첫 글자까지 수십 초 걸리게 함
     });
     return model;
   }
+
+  /** getModel 을 한 번만 실행 (창을 열 때 미리 시작해도, 질문을 보낼 때 또 불러도 앱이 두 번 초기화되지 않음) */
+  let modelPromise = null;
+  const loadModel = () => (modelPromise ??= getModel().catch((e) => { modelPromise = null; throw e; }));
+  /** 창을 열 때 SDK·App Check 토큰을 미리 준비해 첫 질문의 대기 시간을 줄임. 실패해도 조용히 넘어가고 보낼 때 다시 시도 */
+  const warmUp = () => { loadModel().then(ensureAppCheckToken).catch(() => {}); };
 
   /** App Check 토큰을 미리 받아 둠. reCAPTCHA 가 응답하지 않으면(도메인 미허용·차단 등) 무한 대기하지 않고 안내 */
   async function ensureAppCheckToken() {
@@ -450,7 +456,7 @@ export function createChat(deps) {
         selected: `아래 <passage>는 앱에서 선택한 날짜 ${deps.date()}의 읽기표 본문이며 각 제목 끝에 날짜가 적혀 있습니다.`, none: '' }[source];
       const scopeName = { reader: `지금 읽는 본문(${sc.reader?.[0] ? deps.spanLabel(sc.reader[0]) : ''})`, question: `${asked.map((d) => `${d} 읽기표 본문`).join(', ')}`, selected: `${deps.date()} 읽기표 본문`, none: '' }[source];
       const text = buildUserText({ question, plan, passageNote, passages, scopeName: passages.length ? scopeName : '', focus: source === 'reader' ? (sc.reader?.[0].focus ?? []) : [], memos, memoTotal: allMemos.length, memoBooks, memoDay: writtenToday ? { label, total: writtenToday.length } : null, memoScope, generalNote: generalSummaryNote({ question, books: deps.books(), spans, hasPassages: passages.length > 0 }), translation: deps.translation() });
-      const m = await getModel();
+      const m = await loadModel();
       await ensureAppCheckToken();
       const result = await m.generateContentStream({ contents: [...historyContents(history), { role: 'user', parts: [{ text }] }] });
       let answer = '';
@@ -511,6 +517,7 @@ export function createChat(deps) {
     const dialog = $('#chat-dialog');
     if (!dialog.open) { deps.prepare(dialog); dialog.showModal(); }
     $('#chat-input').focus();
+    warmUp();
   }
 
   function clear() {

@@ -1741,6 +1741,54 @@ function exportMemos() {
   toast(`메모 ${state.memos.length}건을 파일로 저장했습니다.`);
 }
 
+/** 영어 메모의 말씀을 이 기기에 가져온 NIV 본문으로 바꾼 메모 목록 (순수 함수). 저장된 본문과 다른 구절만 바꾸고, 바뀐 메모만 새 객체로 돌려준다 (수정일 updatedAt 은 그대로 둠: 말씀 본문 번역만 바뀌고 메모를 고친 것은 아니므로 목록 순서가 변하지 않게).
+ * nivText(bookId, chapter, verses) → NIV 본문 문자열, 이 책을 가져오지 않았거나 못 찾으면 '' (그 구절은 그대로 둠) */
+function swapToNiv(memos, nivText) {
+  const changed = [];
+  let passages = 0;
+  for (const m of memos) {
+    if (m.lang !== 'en') continue;
+    let touched = false;
+    const next = m.passages.map((p) => {
+      const text = nivText(p.bookId, p.chapter, p.verses);
+      if (!text || text === p.text) return p;
+      touched = true;
+      passages++;
+      return { ...p, text };
+    });
+    if (touched) changed.push({ ...m, passages: next });
+  }
+  return { changed, passages };
+}
+
+/** "메모 영어본문을 NIV" 버튼: 영어 메모에 저장된 NIV가 아닌 본문(BSB 등)을 이 기기의 NIV 본문으로 바꿈. 바꿀 것이 없으면 알림 */
+async function convertMemosToNiv() {
+  if (!state.imported.niv.size) { toast('이 기기에 NIV 본문이 없습니다. 성경 화면에서 NIV 파일을 먼저 가져오세요.'); return; }
+  if (!state.memos.some((m) => m.lang === 'en')) { toast('바꿀 것이 없습니다. 영어 메모가 없습니다.'); return; }
+  toast('영어 메모의 본문을 확인하는 중입니다…');
+  const cache = new Map(); // 'bookId:chapter' → 절 목록
+  for (const m of state.memos) {
+    if (m.lang !== 'en') continue;
+    for (const p of m.passages) {
+      const key = `${p.bookId}:${p.chapter}`;
+      if (cache.has(key) || !state.imported.niv.has(p.bookId)) continue;
+      try { cache.set(key, await loadChapter(p.bookId, p.chapter, 'en', 'niv')); } catch { cache.set(key, null); }
+    }
+  }
+  const r = swapToNiv(state.memos, (bookId, chapter, verses) => { const v = cache.get(`${bookId}:${chapter}`); return v ? passageTextOf(v, verses) : ''; });
+  if (!r.changed.length) { toast('바꿀 것이 없습니다. 영어 메모의 본문이 이미 NIV이거나, 이 기기에 NIV 본문이 없는 책입니다.'); return; }
+  if (!window.confirm(`영어 메모 ${r.changed.length}개의 말씀 ${r.passages}곳을 NIV 본문으로 바꿀까요?
+
+⚠ 경고: 바꾸면 저장된 NIV가 아닌 본문은 사라지고 되돌릴 수 없습니다. 메모의 수정일은 바뀌지 않습니다.
+(먼저 "메모 내보내기"로 백업해 두는 것을 권합니다.)`)) return;
+  const byId = new Map(r.changed.map((m) => [m.id, m]));
+  state.memos = state.memos.map((m) => byId.get(m.id) ?? m);
+  persistMemos();
+  remoteCall((remote) => Promise.all(r.changed.map((m) => remote.save(m))));
+  refreshViews();
+  toast(`영어 메모 ${r.changed.length}개의 말씀 ${r.passages}곳을 NIV로 바꿨습니다.`);
+}
+
 /** 레이블을 목록과 모든 메모에서 제거 (메모에 남기면 다음 시작 때 목록에 되살아남). 수정된 메모 수를 돌려준다. */
 function removeLabelEverywhere(label) {
   state.labels = state.labels.filter((l) => l !== label);
@@ -1959,6 +2007,7 @@ const actions = {
   'share-meditation-txt': () => shareMeditationText(),
   'share-meditation-txt-ko': () => shareMeditationText(true),
   'memos-export': exportMemos,
+  'memos-niv': convertMemosToNiv,
   'dl-txt': downloadTxt,
   'dl-pdf': printPdf,
   'labels-open': () => { $('#labels-notice').hidden = true; renderLabelsDialog(); $('#labels-dialog').showModal(); },

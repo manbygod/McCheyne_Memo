@@ -277,20 +277,20 @@ function memoToShareText(memo, passageRef) {
   return [verses, rule, `✍️ 나의 묵상\n\n${memo.content}`].join('\n\n');
 }
 
-/** 그날 읽기표(트랙별 항목)의 장 목록 → 'bookId:chapter' 키 집합 (chapter2가 있으면 범위 전체) */
-function readingChapterKeys(day) {
-  const keys = new Set();
-  for (const r of [].concat(day).flat().filter(Boolean).map(normalizeReading)) {
-    for (let ch = r.chapter; ch <= (r.chapter2 ?? r.chapter); ch++) keys.add(`${r.book}:${ch}`);
-  }
-  return keys;
+/** 그날 읽기표(트랙별 항목) → 절 범위까지 담은 구간 [{bookId, chapter, from, to}] (from/to 가 null 이면 장 처음/끝) */
+function readingDaySpans(day) {
+  return [].concat(day).flat().filter(Boolean).map(normalizeReading).flatMap(readingSpans);
 }
 
-/** 그날 읽기표의 장에 말씀이 하나라도 걸린 메모, 수정일 최신순 */
+/** 메모의 말씀(책·장·절)이 읽기표 구간과 절 단위로 겹치는가. 메모에 절 정보가 없으면 장이 같은 것으로 본다 */
+const passageInSpans = (p, spans) => spans.some((s) => s.bookId === p.bookId && s.chapter === p.chapter
+  && (!p.verses?.length || p.verses.some((n) => n >= (s.from ?? 1) && n <= (s.to ?? Infinity))));
+
+/** 그날 읽기표의 구절(절 범위 포함)에 말씀이 하나라도 걸린 메모, 수정일 최신순 */
 const memosForReadings = (memos, day) => {
-  const keys = readingChapterKeys(day);
+  const spans = readingDaySpans(day);
   return memos
-    .filter((m) => m.passages.some((p) => keys.has(`${p.bookId}:${p.chapter}`)))
+    .filter((m) => m.passages.some((p) => passageInSpans(p, spans)))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 };
 

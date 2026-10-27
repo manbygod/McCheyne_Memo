@@ -1657,11 +1657,16 @@ async function deflate(bytes) {
   } catch { return null; }
 }
 
-/** 영어 메모의 말씀을 개역한글 본문으로 바꾼 사본 (원본 메모는 그대로). 본문을 못 불러오면 원래 본문 유지 */
-async function toKorean(m) {
-  if (m.lang !== 'en') return m;
+/** 한글 공유용 번역: 이 기기에 그 책의 개역개정을 가져왔으면 개역개정, 없으면 개역한글 → 번역 ID 또는 null(번들 개역한글) */
+const koShareVersion = (bookId) => (state.imported.nkrv?.has(bookId) ? 'nkrv' : null);
+
+/** 공유용 사본. 메모를 쓸 때 저장한 본문을 그대로 쓰고, "한글" 버튼에서 영어 메모만 한글 본문(개역개정, 없으면 개역한글)으로 바꾼다.
+    원본 메모는 그대로. 본문을 못 불러오면 저장된 본문 유지 */
+async function withShareText(m, korean = false) {
+  if (!korean || m.lang !== 'en') return m;
   const passages = await Promise.all(m.passages.map(async (p) => {
-    const verses = await loadChapter(p.bookId, p.chapter, 'ko');
+    let verses = null;
+    try { verses = await loadChapter(p.bookId, p.chapter, 'ko', koShareVersion(p.bookId)); } catch { /* 저장된 본문 유지 */ }
     const text = verses ? passageTextOf(verses, p.verses) : '';
     return { ...p, text: text || p.text };
   }));
@@ -1672,7 +1677,7 @@ async function toKorean(m) {
 async function shareMeditationText(korean = false) {
   let memos = memosOfDay(state.date);
   if (!memos.length) { toast('이 날짜의 읽기 본문에 기록한 메모가 없습니다.'); return; }
-  if (korean) memos = await Promise.all(memos.map(toKorean));
+  memos = await Promise.all(memos.map((m) => withShareText(m, korean)));
   await shareText(meditationToShareText(memos, state.date, passageRef));
 }
 
@@ -1681,7 +1686,7 @@ async function shareMeditation(korean = false) {
   let memos = memosOfDay(state.date);
   if (!memos.length) { toast('이 날짜의 읽기 본문에 기록한 메모가 없습니다.'); return; }
   toast('PDF를 만드는 중입니다…');
-  if (korean) memos = await Promise.all(memos.map(toKorean));
+  memos = await Promise.all(memos.map((m) => withShareText(m, korean)));
   const filename = `말씀묵상${korean ? '-한글' : ''}-${state.date}.pdf`;
   await deliverFile(await makeMeditationPdf(memos, state.date), filename, '오늘의 말씀묵상');
 }

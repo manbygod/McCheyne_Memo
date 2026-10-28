@@ -1364,19 +1364,38 @@ function renderMemos() {
   renderPager(page, pages);
 }
 
+const PAGER_MAX_SPAN = 5, PAGER_MIN_SPAN = 3;
+let pagerState = { page: 1, pages: 1 };
+
+/** 이전·번호·다음이 한 줄에 들어가도록 번호 개수를 5→3개 사이에서 줄여 그린다 (3개로도 넘치면 다음 버튼이 아래 줄로). 쪽 표시는 항상 아래 줄 중앙 */
 function renderPager(page, pages) {
+  pagerState = { page, pages };
   const nav = $('#pager');
   nav.hidden = pages <= 1;
   const btn = (label, target, extra = {}) =>
     h('button', { type: 'button', class: 'btn', 'data-action': 'page-go', 'data-page': target, ...extra }, label);
-  mount(nav,
+  const draw = (span) => mount(nav,
     btn('‹ 이전', page - 1, { disabled: page <= 1, 'aria-label': '이전 페이지' }),
-    pageWindow(page, pages).map((n) => btn(n, n, n === page
+    pageWindow(page, pages, span).map((n) => btn(n, n, n === page
       ? { 'aria-current': 'page', 'aria-label': `${n}페이지 (현재)`, class: 'btn btn--primary' }
       : { 'aria-label': `${n}페이지` })),
-    h('span', { class: 'pager__info' }, `${page} / ${pages}`),
-    btn('다음 ›', page + 1, { disabled: page >= pages, 'aria-label': '다음 페이지' }));
+    btn('다음 ›', page + 1, { disabled: page >= pages, 'aria-label': '다음 페이지' }),
+    h('span', { class: 'pager__info' }, `${page} / ${pages}`));
+  const oneRow = () => {
+    const tops = [...nav.querySelectorAll('.btn')].map((b) => b.offsetTop);
+    return tops.every((t) => t === tops[0]);
+  };
+  for (let span = PAGER_MAX_SPAN; span >= PAGER_MIN_SPAN; span--) {
+    draw(span);
+    if (nav.hidden || oneRow()) break;
+  }
 }
+window.addEventListener('resize', () => {
+  const nav = $('#pager');
+  const focusedPage = nav.contains(document.activeElement) ? document.activeElement.dataset.page : null;
+  renderPager(pagerState.page, pagerState.pages);
+  if (focusedPage != null) nav.querySelector(`.btn[data-page="${CSS.escape(focusedPage)}"]`)?.focus(); // 다시 그려도 키보드·스크린리더 포커스 유지
+});
 
 function memoCard(m, full) {
   return h('li', { class: 'memo-card', 'data-id': m.id },

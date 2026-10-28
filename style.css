@@ -231,7 +231,7 @@ textarea.field__control { width: 100%; resize: vertical; }
 
 .pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 16px 0; }
 .pager[hidden] { display: none; }
-.pager__info { color: var(--c-muted); font-size: .85rem; margin: 0 4px; }
+.pager__info { flex: 0 0 100%; text-align: center; color: var(--c-muted); font-size: .85rem; } /* 버튼 줄 아래 중앙 */
 .btn[disabled] { opacity: .45; cursor: not-allowed; }
 .chips { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 6px 0; }
 .chip {

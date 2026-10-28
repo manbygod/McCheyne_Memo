@@ -435,9 +435,11 @@ export function createChat(deps) {
       const allMemos = deps.memos();
       const bookIds = box.checked && !writtenToday ? booksInQuestion(question, deps.books()) : [];
       const strict = box.checked && !writtenToday && (bookIds.length > 0 || asked.length > 0); // 날짜(읽기표 본문)나 책 이름을 말했으면 그 범위의 메모만
-      const pool = writtenToday ?? (strict ? memosForScope(allMemos, { chapters: spans, bookIds }) : allMemos);
+      const dated = strict && asked.length > 0; // 날짜+책 이름("오늘 읽기표 시편")이면 책 전체가 아니라 그날 읽기표 중 그 책의 장만
+      const scopeSpans = dated && bookIds.length ? spans.filter((s) => bookIds.includes(s.bookId)) : spans;
+      const pool = writtenToday ?? (strict ? memosForScope(allMemos, { chapters: scopeSpans, bookIds: dated ? [] : bookIds }) : allMemos);
       const memoScope = strict ? { label: [...(asked.length ? [`${dayLabel(asked, deps.today())} 읽기표 본문`] : []), ...bookIds.map((id) => deps.books().find((b) => b.id === id)?.ko ?? id)].join(', '), total: pool.length } : null;
-      const memos = box.checked ? selectMemosForChat(pool, { chapters: spans, query: question, topic: !!writtenToday || (isMemoTopicQuestion(question) && !asked.length), bookIds: writtenToday ? [] : bookIds, refOf: deps.refOf, fill: !!writtenToday || strict }) : [];
+      const memos = box.checked ? selectMemosForChat(pool, { chapters: spans, query: question, topic: !!writtenToday || (isMemoTopicQuestion(question) && !asked.length), bookIds: writtenToday || dated ? [] : bookIds, refOf: deps.refOf, fill: !!writtenToday || strict }) : [];
       if (box.checked && !memos.length && /메모/.test(question)) { // 관련 메모가 없으면 AI를 부르지 않고 알림
         const msg = memoScope ? `${memoScope.label}에 구절이 붙은 메모가 없습니다.` : '질문과 관련된 메모를 찾지 못했습니다.';
         reply.li.classList.remove('chat__message--pending');

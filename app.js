@@ -22,6 +22,9 @@ const pad = (n) => String(n).padStart(2, '0');
 /** 로컬 날짜 → 'YYYY-MM-DD' (ISO 8601 날짜) */
 const toISODate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/** 'YYYY-MM-DD' → 요일 한 글자('일'~'토') */
+const weekdayChar = (iso) => '일월화수목금토'[new Date(`${iso}T00:00`).getDay()];
+
 /** 'YYYY-MM-DD' ± days */
 function shiftISODate(iso, days) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -805,6 +808,9 @@ function announceDay() {
 
 function renderToday() {
   $('#date-input').value = state.date;
+  $('#date-display').textContent = `${state.date}(${weekdayChar(state.date)})`;
+  // 스크린리더: 라벨에 요일까지 포함 (예: "날짜 선택, 2026년 11월 6일 금요일")
+  $('#date-label').textContent = `날짜 선택, ${new Date(`${state.date}T00:00`).toLocaleDateString('ko-KR', { dateStyle: 'full' })}`;
   const day = state.plan.days[planKey(state.date, state.plan)] ?? [];
   $('#plan-note').textContent = state.plan.source ? '' : '※ 읽기표는 맥체인 4트랙 구조를 따른 근사값입니다. (README 참고)';
   mount($('#reading-list'), state.plan.tracks.map((_, i) => {

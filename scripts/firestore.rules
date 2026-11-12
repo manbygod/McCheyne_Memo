@@ -44,7 +44,8 @@ service cloud.firestore {
     // 이메일은 구글이 확인한 것(email_verified)만 인정한다. 크기 상한은 prayer.js 의 LIMITS 와 같은 값.
     function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
     function myEmail() { return request.auth.token.email.lower(); }
-    function isSuper() { return signedIn() && myEmail() == 'manbygod@gmail.com'; }
+    function superEmail() { return 'manbygod@gmail.com'; } // 슈퍼관리자를 바꾸려면 이 값과 prayer.js 의 SUPER_ADMIN_EMAIL 을 함께 고친다
+    function isSuper() { return signedIn() && myEmail() == superEmail(); }
     function isAdmin() { return isSuper() || (signedIn() && exists(/databases/$(database)/documents/prayerAdmins/$(myEmail()))); }
     function manages(room) { return isSuper() || (isAdmin() && (room.createdBy == myEmail() || myEmail() in room.members)); }
     function roomData(roomId) { return get(/databases/$(database)/documents/prayerRooms/$(roomId)).data; }
@@ -58,6 +59,7 @@ service cloud.firestore {
         return d.keys().hasOnly(['email', 'name', 'createdBy', 'createdAt', 'updatedAt'])
           && d.keys().hasAll(['email', 'name', 'createdBy', 'createdAt', 'updatedAt'])
           && d.email == adminEmail && d.email == d.email.lower() && d.email.size() <= 320
+          && d.email != superEmail() // 슈퍼관리자 계정은 일반 관리자로 등록할 수 없다 (이미 모든 권한이 있음)
           && d.name is string && d.name.size() >= 1 && d.name.size() <= 40
           && d.createdBy is string && d.createdAt is string && d.createdAt.size() <= 40
           && d.updatedAt is string && d.updatedAt.size() <= 40;

@@ -36,13 +36,37 @@ service cloud.firestore {
     }
 
     // ===== 기도방 (prayer.js) =====
-    // 관리자(아래 이메일)만 기도방을 만들고 고치고 지운다. 초대받은 사람(members)은 읽고, 기도제목을 올리고, 자기 기도제목만 고치거나 지운다.
+    // 권한은 세 단계다.
+    //  - 슈퍼관리자(isSuper, 아래 이메일): 모든 기도방의 모든 권한 + prayerAdmins(관리자 목록) 관리. prayer.js 의 SUPER_ADMIN_EMAIL 과 같은 값.
+    //  - 관리자(prayerAdmins/{이메일} 문서가 있는 계정): 기도방을 만들 수 있고, 관리 기능(이름·초대 고치기, 기도방 삭제, 모든 기도제목 편집·삭제)은
+    //    자기가 만들었거나(createdBy) 구성원(members)으로 들어가 있는 기도방에서만 쓴다. 다른 관리자의 기도방은 읽지도 못한다.
+    //  - 그 밖의 초대받은 사람(members): 읽고, 기도제목을 올리고, 자기 기도제목만 고치거나 지운다.
     // 이메일은 구글이 확인한 것(email_verified)만 인정한다. 크기 상한은 prayer.js 의 LIMITS 와 같은 값.
     function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
     function myEmail() { return request.auth.token.email.lower(); }
-    function isAdmin() { return signedIn() && myEmail() == 'manbygod@gmail.com'; }
+    function isSuper() { return signedIn() && myEmail() == 'manbygod@gmail.com'; }
+    function isAdmin() { return isSuper() || (signedIn() && exists(/databases/$(database)/documents/prayerAdmins/$(myEmail()))); }
+    function manages(room) { return isSuper() || (isAdmin() && (room.createdBy == myEmail() || myEmail() in room.members)); }
     function roomData(roomId) { return get(/databases/$(database)/documents/prayerRooms/$(roomId)).data; }
+    // 슈퍼관리자는 방 문서를 읽지 않고도 통과한다 (CSV 를 한꺼번에 올릴 때 조회 횟수를 아끼기 위해)
+    function canManageRoom(roomId) { return isSuper() || (isAdmin() && (roomData(roomId).createdBy == myEmail() || myEmail() in roomData(roomId).members)); }
     function isMember(roomId) { return signedIn() && myEmail() in roomData(roomId).members; }
+
+    // 관리자 목록: prayerAdmins/{소문자 이메일}. 자기 문서는 누구나 읽을 수 있고(내가 관리자인지 확인), 목록 조회와 쓰기는 슈퍼관리자만.
+    match /prayerAdmins/{adminEmail} {
+      function isAdminDoc(d) {
+        return d.keys().hasOnly(['email', 'name', 'createdBy', 'createdAt', 'updatedAt'])
+          && d.keys().hasAll(['email', 'name', 'createdBy', 'createdAt', 'updatedAt'])
+          && d.email == adminEmail && d.email == d.email.lower() && d.email.size() <= 320
+          && d.name is string && d.name.size() >= 1 && d.name.size() <= 40
+          && d.createdBy is string && d.createdAt is string && d.createdAt.size() <= 40
+          && d.updatedAt is string && d.updatedAt.size() <= 40;
+      }
+      allow get: if signedIn() && (isSuper() || adminEmail == myEmail());
+      allow list: if isSuper();
+      allow create, update: if isSuper() && isAdminDoc(request.resource.data);
+      allow delete: if isSuper();
+    }
     // 초대할 때 이메일 뒤에 적어 둔 이름 (가져온 기도제목처럼 이메일이 없는 글의 주인을 가리는 데 씀). 맵 키는 이메일의 '.' 를 ',' 로 바꾼 것
     function myMappedName(roomId) { return roomData(roomId).get('memberNames', {}).get(myEmail().replace('\\.', ','), null); }
 
@@ -53,9 +77,13 @@ service cloud.firestore {
           && d.memberNames is map
           && d.createdBy is string && d.createdAt is string && d.updatedAt is string;
       }
-      allow read: if isAdmin() || (signedIn() && myEmail() in resource.data.members);
-      allow create, update: if isAdmin() && isRoom(request.resource.data);
-      allow delete: if isAdmin();
+      // 구성원이거나, 관리자가 만든 방(구성원에서 빠졌어도)이거나, 슈퍼관리자만 읽는다
+      allow read: if signedIn() && (isSuper() || myEmail() in resource.data.members || (isAdmin() && resource.data.createdBy == myEmail()));
+      // 만들 때는 만든 사람(createdBy)이 본인이어야 하고, 고칠 때 createdBy 는 슈퍼관리자만 바꿀 수 있다 (관리자 계정을 바꿀 때 옮김)
+      allow create: if isAdmin() && isRoom(request.resource.data) && request.resource.data.createdBy == myEmail();
+      allow update: if manages(resource.data) && isRoom(request.resource.data)
+                    && (request.resource.data.createdBy == resource.data.createdBy || isSuper());
+      allow delete: if manages(resource.data);
 
       match /prayers/{prayerId} {
         // 모든 기도방이 같은 스키마: 게시자, 지메일, 기도제목 마지막 수정일시, 기도제목, 기도응답 마지막 수정일시, 기도응답
@@ -73,13 +101,13 @@ service cloud.firestore {
           return resource.data.authorEmail == myEmail()
             || (resource.data.authorEmail == '' && myMappedName(roomId) == resource.data.author);
         }
-        allow read: if isAdmin() || isMember(roomId);
+        allow read: if isMember(roomId) || canManageRoom(roomId);
         allow create: if isPrayer(request.resource.data)
-                      && (isAdmin() || (isMember(roomId) && request.resource.data.authorEmail == myEmail()));
+                      && (canManageRoom(roomId) || (isMember(roomId) && request.resource.data.authorEmail == myEmail()));
         allow update: if isPrayer(request.resource.data)
                       && request.resource.data.author == resource.data.author
-                      && (isAdmin() || (isMember(roomId) && isMine() && request.resource.data.authorEmail == myEmail()));
-        allow delete: if isAdmin() || (isMember(roomId) && isMine());
+                      && (canManageRoom(roomId) || (isMember(roomId) && isMine() && request.resource.data.authorEmail == myEmail()));
+        allow delete: if canManageRoom(roomId) || (isMember(roomId) && isMine());
       }
     }
   }

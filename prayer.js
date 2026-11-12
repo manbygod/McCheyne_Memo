@@ -1,10 +1,13 @@
 /* 기도방 (Firestore). 처음 "기도"를 열 때만 app.js 가 동적으로 불러온다.
-   - 관리자(ADMIN_EMAIL): 기도방 만들기(CSV)·관리(이름·초대·삭제) + 사용자 기능
+   - 슈퍼관리자(SUPER_ADMIN_EMAIL): 모든 기도방의 모든 권한 + 관리자 관리(prayerAdmins 문서로 관리자 권한을 부여·편집·삭제)
+   - 관리자(prayerAdmins 에 등록된 계정): 기도방 만들기(CSV·빈 방), 그리고 자기가 만들었거나 구성원인 기도방의 관리(이름·초대·삭제·모든 기도제목 편집) + 사용자 기능
    - 사용자: 초대받은 기도방에서 기도제목 검색·게시·편집
    - 데이터: prayerRooms/{방} {name, members[], memberNames{}, ...} 와 prayerRooms/{방}/prayers/{기도} (규칙: scripts/firestore.rules)
    - 사용자·외부 텍스트는 textContent/createElement 로만 넣는다 (innerHTML 미사용) */
 
-export const ADMIN_EMAIL = 'manbygod@gmail.com';
+/** 슈퍼관리자 (scripts/firestore.rules 의 isSuper() 와 같은 값). 모든 기도방의 모든 권한을 갖고 관리자 권한을 부여한다.
+    일반 관리자 목록은 코드가 아니라 Firestore 의 prayerAdmins/{이메일} 문서로 관리한다 */
+export const SUPER_ADMIN_EMAIL = 'manbygod@gmail.com';
 export const CSV_HEADER = ['게시자', '게시일', '기도 제목', '기도 응답'];
 /** 크기 상한. scripts/firestore.rules 와 맞춘다 */
 export const LIMITS = { fileBytes: 1024 * 1024, rows: 2000, name: 40, author: 40, content: 5000, members: 200 };
@@ -199,7 +202,24 @@ export function cleanPrayer(id, d) {
 export function cleanRoom(id, d) {
   if (!d || typeof d.name !== 'string' || !Array.isArray(d.members)) return null;
   const names = d.memberNames && typeof d.memberNames === 'object' ? d.memberNames : {};
-  return { id, name: d.name, members: d.members.filter((e) => typeof e === 'string'), memberNames: Object.fromEntries(Object.entries(names).filter(([, v]) => typeof v === 'string')) };
+  return {
+    id, name: d.name, members: d.members.filter((e) => typeof e === 'string'), createdBy: typeof d.createdBy === 'string' ? d.createdBy : '',
+    memberNames: Object.fromEntries(Object.entries(names).filter(([, v]) => typeof v === 'string')),
+  };
+}
+
+/** 이 계정이 그 기도방의 관리자 기능을 쓸 수 있는가. role = {superAdmin, admin}.
+    슈퍼관리자는 모든 방, 관리자는 자기가 만들었거나 구성원인 방만, 그 밖에는 불가 */
+export const managesRoom = (room, email, role = {}) =>
+  !!room && !!email && (!!role.superAdmin || (!!role.admin && (room.createdBy === email || room.members.includes(email))));
+
+/** prayerAdmins 문서 → {email, name} 또는 null */
+export function cleanAdmin(id, d) {
+  if (!d || typeof d.name !== 'string') return null;
+  return {
+    id, email: typeof d.email === 'string' ? d.email : id, name: d.name,
+    createdBy: typeof d.createdBy === 'string' ? d.createdBy : '', createdAt: typeof d.createdAt === 'string' ? d.createdAt : '',
+  };
 }
 
 /** 권한 오류 등을 사용자 안내로 */
@@ -214,40 +234,65 @@ export function explainError(e) {
 export function createPrayer(deps) {
   const { $, h, mount, toast, fb, user, copyText, shareText, weekday, today } = deps;
   const S = {
-    mode: 'search', rooms: null, allRooms: null, roomId: '', prayers: [], loadedAt: 0, results: [], kind: 'search',
+    mode: 'search', rooms: null, role: null, admins: null, editAdmin: null, roomId: '', prayers: [], loadedAt: 0, results: [], kind: 'search',
     authors: new Set(), period: 'all', from: '', to: '', editing: new Set(), pending: null, invitees: [], editMember: null, prayersRoom: '',
   };
   const MODES = [['search', '검색'], ['post', '게시'], ['edit', '편집']];
   const ADMIN_MODES = [['create', '기도방 만들기'], ['manage', '기도방 관리']];
+  const SUPER_MODES = [['admins', '관리자 관리']]; // 슈퍼관리자에게만
   const nowISO = () => new Date().toISOString();
 
   const me = () => {
     const u = user();
     return u?.email ? { uid: u.uid, email: u.email, name: u.name } : null;
   };
-  const isAdmin = () => me()?.email === ADMIN_EMAIL;
+  const isSuper = () => !!S.role?.superAdmin;
+  const isAdmin = () => !!S.role?.admin; // 기도방을 만들 수 있는 계정 (슈퍼관리자 포함)
+  /** 목록에 보이는 기도방: 슈퍼관리자는 모든 방, 관리자는 자기가 관리하는 방(만들었거나 구성원), 일반 사용자는 초대받은 방 */
   const roomsOf = () => S.rooms ?? [];
-  const roomById = (id) => [...roomsOf(), ...(S.allRooms ?? [])].find((r) => r.id === id);
+  const roomById = (id) => roomsOf().find((r) => r.id === id);
   const myName = (room) => room?.memberNames?.[nameKey(me().email)] ?? '';
   const isMineIn = (p) => isMine(p, me().email, myName(roomById(S.roomId)));
-  /** 편집·삭제할 수 있는가: 내 기도제목이거나 관리자 */
-  const canEdit = (p) => isAdmin() || isMineIn(p);
-  /** 게시자 선택 칸을 보이는가: 검색, 그리고 모든 기도제목을 다루는 관리자의 편집 */
-  const withAuthors = (kind) => kind === 'search' || isAdmin();
+  /** 관리자 기능을 쓸 수 있는 기도방인가 (내가 만들었거나 구성원인 방, 관리자 계정일 때만) */
+  const canManage = (room) => managesRoom(room, me()?.email, S.role ?? {});
+  const manageHere = () => canManage(roomById(S.roomId)); // 지금 선택한 기도방
+  /** 편집·삭제할 수 있는가: 내 기도제목이거나, 내가 관리하는 기도방 */
+  const canEdit = (p) => manageHere() || isMineIn(p);
+  /** 게시자 선택 칸을 보이는가: 검색, 그리고 모든 기도제목을 다루는 (내가 관리하는 방의) 편집 */
+  const withAuthors = (kind) => kind === 'search' || manageHere();
   const say = (msg) => { $('#prayer-status').textContent = ''; setTimeout(() => { $('#prayer-status').textContent = msg; }, 50); };
   const panel = () => $('#prayer-panel');
   const fx = () => fb();
 
   /* ---- Firestore ---- */
+  /** 내 권한: 슈퍼관리자는 코드의 계정, 관리자는 prayerAdmins/{내 이메일} 문서가 있을 때 (규칙이 자기 문서만 읽게 허용) */
+  async function loadRole() {
+    const email = me().email;
+    if (email === SUPER_ADMIN_EMAIL) { S.role = { superAdmin: true, admin: true }; return; }
+    const { db, fs } = fx();
+    const snap = await fs.getDoc(fs.doc(db, 'prayerAdmins', email));
+    S.role = { superAdmin: false, admin: snap.exists() };
+  }
+  /** 목록에 보이는 기도방: 슈퍼관리자는 모든 방, 관리자는 자기가 구성원이거나 만든 방(= 관리하는 방), 일반 사용자는 초대받은 방.
+      관리하지 않는 방은 목록에 나오지 않고, 규칙도 같은 범위만 읽게 허용한다 */
   async function loadRooms() {
     const { db, fs } = fx();
-    const snap = await fs.getDocs(fs.query(fs.collection(db, 'prayerRooms'), fs.where('members', 'array-contains', me().email)));
-    S.rooms = snap.docs.map((d) => cleanRoom(d.id, d.data())).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const col = fs.collection(db, 'prayerRooms');
+    const email = me().email;
+    const snaps = isSuper()
+      ? [await fs.getDocs(col)]
+      : await Promise.all([
+        fs.getDocs(fs.query(col, fs.where('members', 'array-contains', email))),
+        ...(isAdmin() ? [fs.getDocs(fs.query(col, fs.where('createdBy', '==', email)))] : []),
+      ]);
+    const byId = new Map();
+    for (const snap of snaps) for (const d of snap.docs) { const r = cleanRoom(d.id, d.data()); if (r) byId.set(r.id, r); }
+    S.rooms = [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }
-  async function loadAllRooms() {
+  async function loadAdmins() {
     const { db, fs } = fx();
-    const snap = await fs.getDocs(fs.collection(db, 'prayerRooms'));
-    S.allRooms = snap.docs.map((d) => cleanRoom(d.id, d.data())).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const snap = await fs.getDocs(fs.collection(db, 'prayerAdmins'));
+    S.admins = snap.docs.map((d) => cleanAdmin(d.id, d.data())).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }
   async function loadPrayers(roomId) {
     const { db, fs } = fx();
@@ -256,7 +301,7 @@ export function createPrayer(deps) {
     S.prayersRoom = roomId; // S.prayers 가 어느 기도방의 것인지 (메뉴를 옮겨도 선택한 방과 맞는지 확인용)
     S.loadedAt = Date.now();
   }
-  const invalidate = () => { S.rooms = null; S.allRooms = null; };
+  const invalidate = () => { S.rooms = null; };
 
   /* ---- 공통 조각 ---- */
   function field(label, control, id) {
@@ -277,7 +322,7 @@ export function createPrayer(deps) {
   /* ---- 화면 뼈대 ---- */
   function renderModes() {
     const box = $('#prayer-modes');
-    const list = [...MODES, ...(isAdmin() ? ADMIN_MODES : [])];
+    const list = [...MODES, ...(isAdmin() ? ADMIN_MODES : []), ...(isSuper() ? SUPER_MODES : [])];
     mount(box, list.map(([m, label]) => h('button', {
       type: 'button', class: `btn${S.mode === m ? ' btn--primary' : ''}`, 'data-action': 'prayer-mode', 'data-mode': m, 'aria-pressed': S.mode === m ? 'true' : 'false',
     }, label)));
@@ -293,18 +338,24 @@ export function createPrayer(deps) {
       return;
     }
     note.textContent = '';
-    renderModes();
     try {
-      if (S.mode === 'manage' && isAdmin()) { if (!S.allRooms) await loadAllRooms(); } else if (!S.rooms) await loadRooms();
-    } catch (e) { console.error('[prayer]', e); note.textContent = explainError(e); mount(panel()); return; }
+      if (!S.role) await loadRole(); // 권한을 알아야 어떤 메뉴·기도방을 보여 줄지 정해진다
+      if (!S.rooms) await loadRooms();
+      if (S.mode === 'admins' && isSuper() && !S.admins) await loadAdmins();
+    } catch (e) { console.error('[prayer]', e); $('#prayer-modes').hidden = true; note.textContent = explainError(e); mount(panel()); return; }
+    if (!isAdmin() && (S.mode === 'create' || S.mode === 'manage')) S.mode = 'search'; // 권한이 없는 화면에 머물지 않게 (메뉴 표시 전에 바로잡음)
+    if (!isSuper() && S.mode === 'admins') S.mode = 'search';
+    renderModes();
     renderPanel();
   }
 
   function renderPanel() {
     const m = S.mode;
     if (!isAdmin() && (m === 'create' || m === 'manage')) S.mode = 'search';
+    if (!isSuper() && m === 'admins') S.mode = 'search';
     if (S.mode === 'create') renderCreate();
     else if (S.mode === 'manage') renderManage();
+    else if (S.mode === 'admins') renderAdmins();
     else if (roomsOf().length === 0) { mount(panel(), h('p', { class: 'view__note' }, '초대받은 기도방이 없습니다.')); say('초대받은 기도방이 없습니다.'); }
     else if (S.mode === 'post') renderPost();
     else renderQuery(S.mode);
@@ -315,22 +366,31 @@ export function createPrayer(deps) {
     S.kind = kind;
     if (S.roomId && !roomsOf().some((r) => r.id === S.roomId)) S.roomId = '';
     const periodRow = h('fieldset', { class: 'prayer-fieldset', id: 'prayer-period', hidden: !S.roomId }, // 기도방을 고르기 전에는 숨김
-      h('legend', { class: 'field__label' }, kind === 'edit' && !isAdmin() ? '내가 게시한 날짜' : '기도제목 게시 날짜'),
+      h('legend', { class: 'field__label', id: 'prayer-period-legend' }, periodLegend(kind)),
       [['all', '전체'], ['range', '기간 선택'], ['recent', '최근 게시 (마지막으로 올린 날짜)']].map(([v, label]) =>
         h('label', { class: 'check' }, h('input', { type: 'radio', name: 'prayer-period', value: v, checked: S.period === v, 'data-prayer-field': 'period' }), ` ${label}`)),
       h('div', { class: 'prayer-range', id: 'prayer-range', hidden: S.period !== 'range' },
         datePick('prayer-from', '시작일', S.from, 'from'),
         datePick('prayer-to', '종료일', S.to, 'to')));
     mount(panel(), h('form', { class: 'prayer-form', 'data-prayer-form': 'query', role: 'search' },
-      kind === 'edit' && isAdmin() ? h('p', { class: 'view__note' }, '관리자는 기도방의 모든 기도제목을 편집·삭제할 수 있습니다.') : null,
       roomSelect('prayer-room', roomsOf(), S.roomId),
-      withAuthors(kind) ? h('div', { id: 'prayer-authors' }) : null,
+      h('div', { id: 'prayer-authors' }), // 검색, 또는 내가 관리하는 방의 편집일 때만 채워짐
       periodRow,
-      h('button', { type: 'submit', class: 'btn btn--primary' }, kind === 'edit' && !isAdmin() ? '내 기도제목 검색' : '검색')),
+      h('button', { type: 'submit', class: 'btn btn--primary', id: 'prayer-query-submit' }, queryButtonText(kind))),
     h('ul', { class: 'prayer-list', id: 'prayer-results', tabindex: '-1', 'aria-label': '검색한 기도제목' }));
-    if (withAuthors(kind)) renderAuthors();
+    renderAuthors();
     if (S.results.length && S.resultsKind === kind) renderResults();
     if (S.roomId && S.prayersRoom !== S.roomId) loadRoomPrayers(); // 메뉴를 옮겨 와서 방은 선택돼 있지만 기도제목은 아직 없을 때
+  }
+
+  /** 편집 화면의 문구: 내가 관리하는 방이면 모든 기도제목, 아니면 내 기도제목만 */
+  const periodLegend = (kind) => (kind === 'edit' && !manageHere() ? '내가 게시한 날짜' : '기도제목 게시 날짜');
+  const queryButtonText = (kind) => (kind === 'edit' && !manageHere() ? '내 기도제목 검색' : '검색');
+  function syncQueryLabels() {
+    const legend = $('#prayer-period-legend');
+    if (legend) legend.textContent = periodLegend(S.kind);
+    const btn = $('#prayer-query-submit');
+    if (btn) btn.textContent = queryButtonText(S.kind);
   }
 
   /** 선택된 기도방의 기도제목을 불러와 게시자 선택을 채운다 */
@@ -340,19 +400,20 @@ export function createPrayer(deps) {
       await loadPrayers(roomId);
       if (S.roomId !== roomId) return; // 그 사이 다른 방을 골랐으면 버림
       S.authors = new Set(authorsOf(S.prayers));
-      if (withAuthors(S.kind)) renderAuthors();
+      renderAuthors();
     } catch (e) { console.error('[prayer]', e); toast(explainError(e)); }
   }
 
   function renderAuthors() {
     const box = $('#prayer-authors');
     if (!box) return;
+    if (!S.roomId || !withAuthors(S.kind)) { mount(box); return; }
     const names = authorsOf(S.prayers);
-    if (!S.roomId) { mount(box); return; }
-    if (S.prayersRoom !== S.roomId) { mount(box, h('p', { class: 'view__note' }, '기도제목을 불러오는 중입니다...')); return; }
-    if (!names.length) { mount(box, h('p', { class: 'view__note' }, '이 기도방에는 아직 기도제목이 없습니다.')); return; }
+    const lead = S.kind === 'edit' ? [h('p', { class: 'view__note' }, '이 기도방의 관리자이므로 모든 기도제목을 편집·삭제할 수 있습니다.')] : [];
+    if (S.prayersRoom !== S.roomId) { mount(box, ...lead, h('p', { class: 'view__note' }, '기도제목을 불러오는 중입니다...')); return; }
+    if (!names.length) { mount(box, ...lead, h('p', { class: 'view__note' }, '이 기도방에는 아직 기도제목이 없습니다.')); return; }
     const all = names.every((n) => S.authors.has(n));
-    mount(box, h('fieldset', { class: 'prayer-fieldset' },
+    mount(box, ...lead, h('fieldset', { class: 'prayer-fieldset' },
       h('legend', { class: 'field__label' }, '기도 게시자 (복수 선택 가능)'),
       h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: all, 'data-prayer-field': 'author-all' }), ' 전체'),
       h('div', { class: 'prayer-authors' }, names.map((n) =>
@@ -368,11 +429,12 @@ export function createPrayer(deps) {
     S.prayersRoom = '';
     const period = $('#prayer-period');
     if (period) period.hidden = !roomId;
+    syncQueryLabels(); // 내가 관리하는 방인지에 따라 편집 화면의 문구가 달라짐
     if (!roomId) { renderAuthors(); return; }
     try {
       await loadPrayers(roomId);
       S.authors = new Set(authorsOf(S.prayers));
-      if (withAuthors(S.kind)) renderAuthors();
+      renderAuthors();
       say(`${roomById(roomId)?.name ?? ''} 기도방을 선택했습니다. 기도제목 ${S.prayers.length}건.`);
     } catch (e) { console.error('[prayer]', e); toast(explainError(e)); }
   }
@@ -400,7 +462,7 @@ export function createPrayer(deps) {
     if (!ul) return;
     mount(ul, S.results.length
       ? S.results.map(card)
-      : h('li', { class: 'view__note' }, S.resultsKind === 'edit' && !isAdmin() ? '조건에 맞는 내 기도제목이 없습니다.' : '조건에 맞는 기도제목이 없습니다.'));
+      : h('li', { class: 'view__note' }, S.resultsKind === 'edit' && !manageHere() ? '조건에 맞는 내 기도제목이 없습니다.' : '조건에 맞는 기도제목이 없습니다.'));
   }
 
   /* ---- 카드 ---- */
@@ -666,7 +728,7 @@ export function createPrayer(deps) {
 
   /* ---- 기도방 관리 (관리자) ---- */
   function renderManage() {
-    const rooms = S.allRooms ?? [];
+    const rooms = roomsOf().filter(canManage); // 관리자는 자기가 관리하는 방만, 슈퍼관리자는 모든 방
     if (!rooms.length) { mount(panel(), h('p', { class: 'view__note' }, '만든 기도방이 없습니다. "기도방 만들기"에서 CSV 파일로 만드세요.')); return; }
     if (!rooms.some((r) => r.id === S.manageId)) S.manageId = '';
     mount(panel(),
@@ -679,7 +741,7 @@ export function createPrayer(deps) {
 
   function renderManageDetail() {
     const box = $('#prayer-manage-detail');
-    const room = (S.allRooms ?? []).find((r) => r.id === S.manageId);
+    const room = roomsOf().filter(canManage).find((r) => r.id === S.manageId);
     if (!room) { mount(box); return; }
     mount(box,
       h('form', { class: 'prayer-form', 'data-prayer-form': 'rename' },
@@ -727,7 +789,7 @@ export function createPrayer(deps) {
     return mine.length;
   }
 
-  const manageRoom = () => (S.allRooms ?? []).find((r) => r.id === S.manageId);
+  const manageRoom = () => roomsOf().filter(canManage).find((r) => r.id === S.manageId);
 
   async function saveRoom(patch, okMsg, focusSel) {
     const room = manageRoom();
@@ -737,7 +799,6 @@ export function createPrayer(deps) {
       await fs.updateDoc(fs.doc(db, 'prayerRooms', room.id), { ...patch, updatedAt: nowISO() });
     } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
     Object.assign(room, patch);
-    S.rooms = null;
     renderManage();
     toast(okMsg);
     if (focusSel) document.querySelector(focusSel)?.focus();
@@ -764,6 +825,95 @@ export function createPrayer(deps) {
     } catch (e) { console.error('[prayer]', e); toast(`계정은 바꿨지만 기존 기도제목의 지메일을 옮기지 못했습니다. ${explainError(e)}`); }
   }
 
+  /* ---- 관리자 관리 (슈퍼관리자) ---- */
+  function renderAdmins() {
+    const admins = S.admins ?? [];
+    mount(panel(),
+      h('p', { class: 'view__note' }, `슈퍼관리자(${SUPER_ADMIN_EMAIL})는 모든 기도방의 모든 권한을 가지며 이 목록에 없습니다. 여기에 등록한 관리자는 기도방을 만들 수 있고, 자기가 만들었거나 구성원으로 들어간 기도방만 관리합니다.`),
+      h('h3', { class: 'prayer-subtitle', id: 'prayer-admins-title' }, `관리자 (${admins.length}명)`),
+      h('ul', { class: 'prayer-members', 'aria-labelledby': 'prayer-admins-title' },
+        admins.length ? admins.map((a) => (a.email === S.editAdmin ? adminEditRow(a) : adminRow(a))) : h('li', { class: 'view__note' }, '등록된 관리자가 없습니다.')),
+      h('form', { class: 'prayer-form prayer-invite', 'data-prayer-form': 'admin-add' },
+        h('h3', { class: 'prayer-subtitle' }, '관리자 추가'),
+        inviteFields('prayer-newadmin')));
+  }
+
+  function adminRow(a) {
+    const who = `${a.name} ${a.email}`;
+    return h('li', { class: 'prayer-members__item' },
+      h('span', { class: 'prayer-members__email' }, `${a.name} (${a.email})`),
+      h('span', { class: 'prayer-members__actions' },
+        h('button', { type: 'button', class: 'btn', 'data-action': 'prayer-admin-edit', 'data-email': a.email, 'aria-label': `${who} 관리자 정보 편집` }, '편집'),
+        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'prayer-admin-remove', 'data-email': a.email, 'aria-label': `${who} 관리자 권한 삭제` }, '삭제')));
+  }
+
+  function adminEditRow(a) {
+    return h('li', { class: 'prayer-members__item prayer-members__item--editing' },
+      h('form', { class: 'prayer-invite__row', 'data-prayer-form': 'admin-edit' },
+        field('지메일 계정', h('input', { class: 'field__control', type: 'email', id: 'prayer-admin-edit-email', value: a.email, autocomplete: 'off', inputmode: 'email', required: true }), 'prayer-admin-edit-email'),
+        field('이름', h('input', { class: 'field__control', type: 'text', id: 'prayer-admin-edit-name', value: a.name, maxlength: String(LIMITS.author), autocomplete: 'off', required: true }), 'prayer-admin-edit-name'),
+        h('button', { type: 'submit', class: 'btn btn--primary' }, '저장'),
+        h('button', { type: 'button', class: 'btn', 'data-action': 'prayer-admin-edit-cancel', 'data-email': a.email }, '취소')));
+  }
+
+  const editAdminBtn = (email) => document.querySelector(`[data-action="prayer-admin-edit"][data-email="${email}"]`);
+
+  async function addAdmin() {
+    const r = parseInvitee($('#prayer-newadmin-email').value, $('#prayer-newadmin-name').value);
+    if (r.error) { toast(r.error); $(r.error.startsWith('이름') ? '#prayer-newadmin-name' : '#prayer-newadmin-email').focus(); return; }
+    const { email, name } = r.member;
+    if (email === SUPER_ADMIN_EMAIL) { toast('슈퍼관리자는 이미 모든 권한이 있습니다.'); return; }
+    const known = (S.admins ?? []).find((a) => a.email === email);
+    const now = nowISO();
+    try {
+      const { db, fs } = fx();
+      const ref = fs.doc(db, 'prayerAdmins', email);
+      if (known) await fs.updateDoc(ref, { name, updatedAt: now });
+      else await fs.setDoc(ref, { email, name, createdBy: me().email, createdAt: now, updatedAt: now });
+      await loadAdmins();
+    } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
+    renderAdmins();
+    $('#prayer-newadmin-email')?.focus();
+    toast(known ? `이미 관리자입니다. ${email} 계정의 이름을 바꿨습니다.` : `${name}(${email}) 님에게 관리자 권한을 부여했습니다.`);
+  }
+
+  async function saveAdminEdit() {
+    const old = S.editAdmin;
+    const cur = (S.admins ?? []).find((a) => a.email === old);
+    if (!cur) return;
+    const r = parseInvitee($('#prayer-admin-edit-email').value, $('#prayer-admin-edit-name').value);
+    if (r.error) { toast(r.error); $(r.error.startsWith('이름') ? '#prayer-admin-edit-name' : '#prayer-admin-edit-email').focus(); return; }
+    const { email, name } = r.member;
+    if (email === SUPER_ADMIN_EMAIL) { toast('슈퍼관리자 계정은 관리자 목록에 넣을 수 없습니다.'); $('#prayer-admin-edit-email').focus(); return; }
+    if (email !== old && S.admins.some((a) => a.email === email)) { toast('이미 관리자로 등록된 계정입니다.'); $('#prayer-admin-edit-email').focus(); return; }
+    if (email !== old && !window.confirm(`관리자 계정을 ${old} → ${email} 으로 바꿀까요?\n\n새 계정이 관리자가 되고, ${old} 계정의 관리자 권한은 사라집니다.\n그 계정이 만든 기도방의 "만든 사람"은 새 계정으로 옮기지만, 기도방 구성원 목록과 올린 기도제목의 지메일은 그대로입니다.`)) return;
+    const now = nowISO();
+    let moved = 0;
+    try {
+      const { db, fs } = fx();
+      if (email === old) await fs.updateDoc(fs.doc(db, 'prayerAdmins', old), { name, updatedAt: now });
+      else {
+        const batch = fs.writeBatch(db);
+        batch.set(fs.doc(db, 'prayerAdmins', email), { email, name, createdBy: cur.createdBy || me().email, createdAt: cur.createdAt || now, updatedAt: now });
+        batch.delete(fs.doc(db, 'prayerAdmins', old));
+        await batch.commit();
+        const rooms = await fs.getDocs(fs.query(fs.collection(db, 'prayerRooms'), fs.where('createdBy', '==', old)));
+        for (let i = 0; i < rooms.docs.length; i += 400) {
+          const b = fs.writeBatch(db);
+          rooms.docs.slice(i, i + 400).forEach((d) => b.update(d.ref, { createdBy: email }));
+          await b.commit();
+        }
+        moved = rooms.docs.length;
+        invalidate();
+      }
+      S.editAdmin = null;
+      await loadAdmins();
+    } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
+    renderAdmins();
+    editAdminBtn(email)?.focus();
+    toast(email === old ? `${name}(${email}) 정보를 저장했습니다.` : `관리자 계정을 ${email} 으로 바꿨습니다.${moved ? ` 만든 기도방 ${moved}개의 만든 사람도 옮겼습니다.` : ''}`);
+  }
+
   async function removeRoom(roomId) {
     const { db, fs } = fx();
     const snap = await fs.getDocs(fs.collection(db, 'prayerRooms', roomId, 'prayers'));
@@ -777,7 +927,7 @@ export function createPrayer(deps) {
 
   /* ---- 이벤트 (app.js 가 data-prayer 영역의 이벤트를 넘겨 준다) ---- */
   const actions = {
-    'prayer-mode': async (el) => { S.mode = el.dataset.mode; S.editMember = null; S.results = []; S.editing.clear(); await render(); $('#prayer-modes [aria-pressed="true"]')?.focus(); },
+    'prayer-mode': async (el) => { S.mode = el.dataset.mode; S.editMember = null; S.editAdmin = null; S.results = []; S.editing.clear(); await render(); $('#prayer-modes [aria-pressed="true"]')?.focus(); },
     'prayer-copy': (el) => { const p = prayerById(el.dataset.id); if (p) copyText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
     'prayer-share': (el) => { const p = prayerById(el.dataset.id); if (p) shareText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
     'prayer-edit': (el) => { const p = prayerById(el.dataset.id); if (p) { S.editing.add(p.id); replaceCard(p, 'prayer-save'); cardEl(p.id)?.querySelector('[data-field="content"]')?.focus(); } },
@@ -801,6 +951,20 @@ export function createPrayer(deps) {
       document.querySelector(`[data-action="prayer-member-edit"][data-email="${el.dataset.email}"]`)?.focus();
     },
     'prayer-create-empty': () => doCreate($('#prayer-create-form'), { empty: true }),
+    'prayer-admin-edit': (el) => { S.editAdmin = el.dataset.email; renderAdmins(); $('#prayer-admin-edit-email')?.focus(); },
+    'prayer-admin-edit-cancel': (el) => { S.editAdmin = null; renderAdmins(); editAdminBtn(el.dataset.email)?.focus(); },
+    'prayer-admin-remove': async (el) => {
+      const a = (S.admins ?? []).find((x) => x.email === el.dataset.email);
+      if (!a || !window.confirm(`${a.name}(${a.email}) 님의 관리자 권한을 삭제할까요?\n\n그 계정이 만든 기도방과 구성원 자격은 그대로 남고, 슈퍼관리자만 그 기도방을 관리할 수 있게 됩니다.`)) return;
+      try {
+        const { db, fs } = fx();
+        await fs.deleteDoc(fs.doc(db, 'prayerAdmins', a.email));
+        await loadAdmins();
+      } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
+      renderAdmins();
+      $('#prayer-newadmin-email')?.focus();
+      toast(`${a.name}(${a.email}) 님의 관리자 권한을 삭제했습니다.`);
+    },
     'prayer-invite-remove': (el) => {
       S.invitees = S.invitees.filter((m) => m.email !== el.dataset.email);
       renderInvitees();
@@ -810,7 +974,9 @@ export function createPrayer(deps) {
     'prayer-member-remove': (el) => {
       const room = manageRoom();
       const email = el.dataset.email;
-      if (!room || !window.confirm(`${email} 계정의 "${room.name}" 접근 권한을 삭제할까요?`)) return;
+      if (!room) return;
+      const selfWarn = email === me().email && room.createdBy !== me().email ? '\n내 계정이라서, 삭제하면 이 기도방을 더 이상 관리할 수 없게 됩니다.' : '';
+      if (!window.confirm(`${email} 계정의 "${room.name}" 접근 권한을 삭제할까요?${selfWarn}`)) return;
       const members = room.members.filter((m) => m !== email);
       const memberNames = { ...room.memberNames };
       delete memberNames[nameKey(email)];
@@ -832,7 +998,7 @@ export function createPrayer(deps) {
     render,
     /** 로그인·로그아웃 때: 캐시를 비우고 기도 화면이 열려 있으면 다시 그림 */
     reset() {
-      Object.assign(S, { rooms: null, allRooms: null, roomId: '', prayers: [], prayersRoom: '', results: [], pending: null, invitees: [], editMember: null, manageId: '' });
+      Object.assign(S, { rooms: null, role: null, admins: null, editAdmin: null, roomId: '', prayers: [], prayersRoom: '', results: [], pending: null, invitees: [], editMember: null, manageId: '' });
       S.editing.clear();
       if (location.hash.replace(/^#\/?/, '').startsWith('prayer')) render();
     },
@@ -856,6 +1022,8 @@ export function createPrayer(deps) {
         toast(r === 'added' ? `초대 목록에 추가했습니다. (${S.invitees.length}명)` : '이미 있는 계정이라 이름을 바꿨습니다.');
         return undefined;
       }
+      if (kind === 'admin-add') return addAdmin();
+      if (kind === 'admin-edit') return saveAdminEdit();
       if (kind === 'member-edit') return saveMemberEdit();
       if (kind === 'member-add') {
         const room = manageRoom();

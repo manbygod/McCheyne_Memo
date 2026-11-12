@@ -10,3 +10,9 @@ backup/
 
 # 다른 앱에서 가져온 개인 메모 원본 (공개 배포 금지)
 data/Kim notes.json
+
+# 기도방 CSV·엑셀 원본 (실제 기도 내용이 담겨 있어 공개 배포 금지)
+data/*.csv
+data/*.xlsx
+*.xlsx
+*.csv

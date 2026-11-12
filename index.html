@@ -7,7 +7,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; frame-src https://*.firebaseapp.com https://accounts.google.com https://content.googleapis.com https://www.google.com; img-src 'self' data: blob: https://*.googleusercontent.com; font-src 'self'; style-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>맥체인 성경읽기</title>
   <meta name="description" content="맥체인 성경읽기표에 따라 매일 말씀을 읽고 메모하고 공유하세요.">
-  <link rel="stylesheet" href="style.css?v=2026-11-06a">
+  <link rel="stylesheet" href="style.css?v=2026-11-12e">
 </head>
 <body>
   <a class="skip-link" href="#main">본문으로 건너뛰기</a>
@@ -18,6 +18,7 @@
       <a class="nav-link" href="#/" data-route="today">오늘</a>
       <a class="nav-link" href="#/memos" data-route="memos">메모</a>
       <a class="nav-link" href="#/bible" data-route="bible">성경</a>
+      <a class="nav-link" href="#/prayer" data-route="prayer">기도</a>
     </nav>
     <div class="site-header__auth" id="auth-box" hidden>
       <span class="site-header__user" id="auth-status"></span>
@@ -164,7 +165,26 @@
       <ul class="board" id="board"></ul>
       <nav class="pager" id="pager" aria-label="메모 페이지" hidden></nav>
     </section>
+
+    <!-- 기도방 (prayer.js 가 처음 열 때 불러와 채움) -->
+    <section id="view-prayer" class="view" aria-labelledby="prayer-title" data-prayer hidden>
+      <h2 class="view__title visually-hidden" id="prayer-title" tabindex="-1">기도</h2>
+      <p class="view__note" id="prayer-note" aria-live="polite"></p>
+      <div class="prayer-modes" id="prayer-modes" role="group" aria-label="기도 메뉴" hidden></div>
+      <p class="visually-hidden" id="prayer-status" role="status"></p>
+      <div id="prayer-panel"></div>
+    </section>
   </main>
+
+  <!-- 기도방 안내·오류 (CSV 형식 불가 사유 등) -->
+  <dialog class="dialog" id="prayer-dialog" aria-labelledby="prayer-dialog-title" aria-describedby="prayer-dialog-summary prayer-dialog-list" role="alertdialog">
+    <h2 class="dialog__title" id="prayer-dialog-title"></h2>
+    <p id="prayer-dialog-summary"></p>
+    <ul class="result-list" id="prayer-dialog-list"></ul>
+    <div class="form__actions">
+      <button type="button" class="btn btn--primary" data-action="dialog-close" autofocus>확인</button>
+    </div>
+  </dialog>
 
   <!-- 메모 작성 -->
   <dialog class="dialog" id="memo-dialog" aria-labelledby="memo-dialog-title">
@@ -313,6 +333,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-11-07b"></script>
+  <script src="app.js?v=2026-11-12h"></script>
 </body>
 </html>

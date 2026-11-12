@@ -452,7 +452,7 @@ function validateBookText(data, book) {
 
 /* ================= 상태 ================= */
 const state = {
-  books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null, fbCfg: null,
+  books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null, fbCfg: null, fb: null, // fb = {db, fs}: 기도방(prayer.js)이 같은 Firestore 연결을 씀
   lang: 'ko', version: null, imported: { nkrv: new Set(), niv: new Set() }, date: toISODate(), query: '', page: 1,
   origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
@@ -545,13 +545,15 @@ async function initFirebase(cfg) {
   state.fbCfg = cfg;
   const auth = A.getAuth(app);
   const db = fs.getFirestore(app);
+  state.fb = { db, fs };
   state.auth = {
     signIn: () => A.signInWithPopup(auth, new A.GoogleAuthProvider()),
     signOut: () => A.signOut(auth),
   };
   renderAuth();
   A.onAuthStateChanged(auth, async (user) => {
-    state.user = user ? { uid: user.uid, name: user.displayName || user.email || '로그인됨' } : null;
+    state.user = user ? { uid: user.uid, name: user.displayName || user.email || '로그인됨', email: user.emailVerified ? (user.email ?? '').toLowerCase() : '' } : null;
+    prayerPromise?.then((p) => p.reset()); // 기도방: 로그인 상태가 바뀌면 캐시를 비우고 다시 그림
     if (!user) { state.remote = null; renderAuth(); chatPromise?.then((c) => c.reset()); return; }
     const col = fs.collection(db, 'users', user.uid, 'memos');
     state.remote = {
@@ -758,6 +760,15 @@ function spanLabel(s) {
   return `${name} ${s.chapter}:${s.from ?? 1}-${s.to ?? (state.lang === 'en' ? 'end' : '끝')}${date}`;
 }
 
+/** 기도방: 처음 "기도"를 열 때만 prayer.js 를 불러온다 */
+let prayerPromise = null;
+function withPrayer(run) {
+  prayerPromise ??= import('./prayer.js?v=2026-11-12m').then((m) => m.createPrayer({
+    $, h, mount, toast, fb: () => state.fb, user: () => state.user, copyText, shareText, weekday: weekdayChar, today: () => toISODate(),
+  })).catch((e) => { prayerPromise = null; throw e; });
+  return prayerPromise.then(run).catch((e) => { console.error('[prayer]', e); toast('기도 화면을 불러오지 못했습니다.'); });
+}
+
 let chatPromise = null;
 function withChat(run) {
   chatPromise ??= import('./chat.js?v=2026-10-27c').then((m) => m.createChat({
@@ -777,6 +788,7 @@ function parseRoute() {
   if (parts[0] === 'read' && bookById(parts[1])) return { name: 'reader', bookId: parts[1], ch: Number(parts[2]) || 1, verse: Number(parts[3]) || null };
   if (parts[0] === 'memos') return { name: 'memos' };
   if (parts[0] === 'bible') return { name: 'bible' };
+  if (parts[0] === 'prayer') return { name: 'prayer' };
   return { name: 'today' };
 }
 
@@ -784,10 +796,11 @@ const setPageTitle = (name) => { document.title = `${name} · 맥체인 성경�
 
 async function route() {
   const r = parseRoute();
-  for (const v of ['today', 'reader', 'memos', 'bible']) $(`#view-${v}`).hidden = v !== r.name;
+  for (const v of ['today', 'reader', 'memos', 'bible', 'prayer']) $(`#view-${v}`).hidden = v !== r.name;
   if (r.name === 'today') setPageTitle('오늘의 읽기');
   else if (r.name === 'memos') setPageTitle('메모');
   else if (r.name === 'bible') setPageTitle('성경 읽기');
+  else if (r.name === 'prayer') setPageTitle('기도');
   if (r.name !== 'reader') state.origin = r.name === 'bible' ? 'bible' : 'today';
   const navRoute = r.name === 'reader' ? state.origin : r.name;
   document.querySelectorAll('.nav-link').forEach((a) => {
@@ -797,6 +810,7 @@ async function route() {
   if (r.name === 'today') renderToday();
   else if (r.name === 'memos') renderMemos();
   else if (r.name === 'bible') renderBible();
+  else if (r.name === 'prayer') withPrayer((p) => p.render());
   else await renderReader(r.bookId, r.ch, r.verse);
 }
 
@@ -2167,7 +2181,11 @@ document.addEventListener('pointercancel', () => { dragging = null; });
 
 document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-action]');
-  if (el) { actions[el.dataset.action]?.(el, e); return; }
+  if (el) {
+    if (el.dataset.action.startsWith('prayer-')) withPrayer((p) => p.act(el)); // 기도방 동작은 prayer.js 가 처리
+    else actions[el.dataset.action]?.(el, e);
+    return;
+  }
   const passage = e.target.closest('.memo-passage'); // 말씀 박스의 빈 곳을 눌러도 '보기'와 동일 (버튼·칩은 위에서 처리됨)
   if (passage) { actions['passage-view'](passage.querySelector('[data-action="passage-view"]')); return; }
   const verse = e.target.closest('.verse');
@@ -2195,6 +2213,7 @@ document.addEventListener('focusout', (e) => {
 document.addEventListener('focusin', (e) => { if (e.target.id === 'range-end') startRange(); });
 
 document.addEventListener('submit', (e) => {
+  if (e.target.closest('[data-prayer]')) { e.preventDefault(); withPrayer((p) => p.submit(e.target)); return; }
   if (e.target.id === 'memo-form') { e.preventDefault(); saveMemo(e.target); }
   else if (e.target.id === 'label-form') {
     e.preventDefault();
@@ -2245,6 +2264,7 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  if (e.target.closest('[data-prayer]')) { withPrayer((p) => p.change(e.target)); return; }
   if (e.target.id === 'import-file') {
     const [file] = e.target.files;
     e.target.value = '';

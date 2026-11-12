@@ -34,5 +34,53 @@ service cloud.firestore {
                             && request.resource.data.labels is list && request.resource.data.labels.size() <= 500
                             && request.resource.data.updatedAt is string && request.resource.data.updatedAt.size() <= 40;
     }
+
+    // ===== 기도방 (prayer.js) =====
+    // 관리자(아래 이메일)만 기도방을 만들고 고치고 지운다. 초대받은 사람(members)은 읽고, 기도제목을 올리고, 자기 기도제목만 고치거나 지운다.
+    // 이메일은 구글이 확인한 것(email_verified)만 인정한다. 크기 상한은 prayer.js 의 LIMITS 와 같은 값.
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function isAdmin() { return signedIn() && myEmail() == 'manbygod@gmail.com'; }
+    function roomData(roomId) { return get(/databases/$(database)/documents/prayerRooms/$(roomId)).data; }
+    function isMember(roomId) { return signedIn() && myEmail() in roomData(roomId).members; }
+    // 초대할 때 이메일 뒤에 적어 둔 이름 (가져온 기도제목처럼 이메일이 없는 글의 주인을 가리는 데 씀). 맵 키는 이메일의 '.' 를 ',' 로 바꾼 것
+    function myMappedName(roomId) { return roomData(roomId).get('memberNames', {}).get(myEmail().replace('\\.', ','), null); }
+
+    match /prayerRooms/{roomId} {
+      function isRoom(d) {
+        return d.name is string && d.name.size() >= 1 && d.name.size() <= 40
+          && d.members is list && d.members.size() <= 200
+          && d.memberNames is map
+          && d.createdBy is string && d.createdAt is string && d.updatedAt is string;
+      }
+      allow read: if isAdmin() || (signedIn() && myEmail() in resource.data.members);
+      allow create, update: if isAdmin() && isRoom(request.resource.data);
+      allow delete: if isAdmin();
+
+      match /prayers/{prayerId} {
+        // 모든 기도방이 같은 스키마: 게시자, 지메일, 기도제목 마지막 수정일시, 기도제목, 기도응답 마지막 수정일시, 기도응답
+        function isPrayer(d) {
+          return d.keys().hasOnly(['author', 'authorEmail', 'contentUpdatedAt', 'content', 'responseUpdatedAt', 'response'])
+            && d.keys().hasAll(['author', 'authorEmail', 'contentUpdatedAt', 'content', 'responseUpdatedAt', 'response'])
+            && d.author is string && d.author.size() >= 1 && d.author.size() <= 40
+            && d.authorEmail is string && d.authorEmail.size() <= 320
+            && d.contentUpdatedAt is string && d.contentUpdatedAt.size() >= 1 && d.contentUpdatedAt.size() <= 40
+            && d.content is string && d.content.size() >= 1 && d.content.size() <= 5000
+            && d.responseUpdatedAt is string && d.responseUpdatedAt.size() <= 40
+            && d.response is string && d.response.size() <= 5000;
+        }
+        function isMine() {
+          return resource.data.authorEmail == myEmail()
+            || (resource.data.authorEmail == '' && myMappedName(roomId) == resource.data.author);
+        }
+        allow read: if isAdmin() || isMember(roomId);
+        allow create: if isPrayer(request.resource.data)
+                      && (isAdmin() || (isMember(roomId) && request.resource.data.authorEmail == myEmail()));
+        allow update: if isPrayer(request.resource.data)
+                      && request.resource.data.author == resource.data.author
+                      && (isAdmin() || (isMember(roomId) && isMine() && request.resource.data.authorEmail == myEmail()));
+        allow delete: if isAdmin() || (isMember(roomId) && isMine());
+      }
+    }
   }
 }

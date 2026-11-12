@@ -344,6 +344,8 @@ button.chip { cursor: pointer; color: inherit; }
 .prayer-date { margin: 0; font-weight: 600; }
 .prayer-list { list-style: none; padding: 0; margin: 16px 0; display: grid; gap: 12px; }
 .prayer-list:focus { outline: none; }
+.prayer-bulk { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.prayer-bulk[hidden] { display: none; }
 .prayer-card { background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 4px; }
 .prayer-card--editing { border-color: var(--c-primary); box-shadow: inset 3px 0 0 var(--c-primary); } /* 색 외에 왼쪽 세로선으로도 편집 중 표시 */
 .prayer-card__head { margin: 0; font-size: 1rem; }

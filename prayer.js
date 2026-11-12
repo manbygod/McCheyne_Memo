@@ -213,10 +213,30 @@ export const isMine = (p, email, name) => (p.authorEmail ? p.authorEmail === ema
 
 export const formatDay = (iso, weekday) => `${iso}(${weekday(iso)})`;
 
-/** 복사·공유할 글 */
+/** 기도제목 한 건의 본문 줄들 (게시자·게시일·기도제목·기도응답). 이모지마다 글자 이름을 함께 적어, 이모지를 읽지 못하는 곳(스크린리더 등)에서도 뜻이 통하게 한다 */
+function prayerLines(p, weekday) {
+  const out = [`👤 게시자: ${p.author}`, `📅 게시일: ${formatDay(p.postedOn, weekday)}`, '', '📝 기도제목', p.content];
+  if (p.response) out.push('', `🌿 기도응답 · ${formatDay(dayOf(p.responseUpdatedAt || p.contentUpdatedAt), weekday)}`, p.response);
+  return out;
+}
+
+/**
+ * 복사·공유할 글 (카카오톡 등 글자만 전달되는 곳에서 보기 좋게 이모지로 꾸밈).
+ * 한 건이면 카드 한 장 모양, 여러 건이면 "📌 1/3" 번호와 구분선으로 건마다 나눈다
+ */
 export function prayerText(p, roomName, weekday) {
-  const out = [`[${roomName}] 기도제목`, `게시자: ${p.author}`, `게시일: ${formatDay(p.postedOn, weekday)}`, '', p.content];
-  if (p.response) out.push('', `기도응답 ${formatDay(dayOf(p.responseUpdatedAt || p.contentUpdatedAt), weekday)}`, p.response);
+  return prayersText([p], roomName, weekday);
+}
+
+export const DIVIDER = '━━━━━━━━━━';
+export function prayersText(list, roomName, weekday) {
+  if (list.length === 1) {
+    const [p] = list;
+    return [`🙏 ${roomName} 기도제목`, '', ...prayerLines(p, weekday), '', p.response ? '🙌 응답에 함께 감사해 주세요.' : '🙏 함께 기도해 주세요.'].join('\n');
+  }
+  const out = [`🙏 ${roomName} 기도제목 모음`, `📋 모두 ${list.length}건`, ''];
+  list.forEach((p, i) => out.push(DIVIDER, `📌 ${i + 1}/${list.length}`, ...prayerLines(p, weekday), ''));
+  out.push(DIVIDER, '', '🙏 함께 기도해 주세요.');
   return out.join('\n');
 }
 
@@ -413,6 +433,9 @@ export function createPrayer(deps) {
       h('div', { id: 'prayer-authors' }), // 검색, 또는 내가 관리하는 방의 편집일 때만 채워짐
       periodRow,
       h('button', { type: 'submit', class: 'btn btn--primary', id: 'prayer-query-submit' }, queryButtonText(kind))),
+    h('div', { class: 'prayer-bulk', id: 'prayer-bulk', role: 'group', 'aria-label': '검색한 기도제목 전체', hidden: true },
+      h('button', { type: 'button', class: 'btn', id: 'prayer-copy-all', 'data-action': 'prayer-copy-all' }),
+      h('button', { type: 'button', class: 'btn', id: 'prayer-share-all', 'data-action': 'prayer-share-all' })),
     h('ul', { class: 'prayer-list', id: 'prayer-results', tabindex: '-1', 'aria-label': '검색한 기도제목' }));
     renderAuthors();
     if (S.results.length && S.resultsKind === kind) renderResults();
@@ -506,7 +529,20 @@ export function createPrayer(deps) {
     mount(ul, S.results.length
       ? S.results.map(card)
       : h('li', { class: 'view__note' }, S.resultsKind === 'edit' && !manageHere() ? '조건에 맞는 내 기도제목이 없습니다.' : '조건에 맞는 기도제목이 없습니다.'));
+    syncBulk();
   }
+
+  /** 결과가 2건 이상일 때만 "결과 전체 복사·공유" 버튼을 보이고, 건수를 글자에 반영 */
+  function syncBulk() {
+    const box = $('#prayer-bulk');
+    if (!box) return;
+    const n = S.results.length;
+    box.hidden = n < 2;
+    if (n < 2) return;
+    $('#prayer-copy-all').textContent = `결과 ${n}건 전체 복사`;
+    $('#prayer-share-all').textContent = `결과 ${n}건 전체 공유`;
+  }
+  const resultsText = () => prayersText(S.results, roomById(S.roomId)?.name ?? '', weekday);
 
   /* ---- 카드 ---- */
   function card(p) {
@@ -579,6 +615,7 @@ export function createPrayer(deps) {
     S.editing.delete(id);
     cardEl(id)?.remove();
     if (!S.results.length) renderResults();
+    else syncBulk(); // 남은 건수가 바뀌면 전체 복사·공유 버튼 글자도 맞춤
     $('#prayer-results')?.focus();
     toast('삭제했습니다.');
     say(`삭제했습니다. 남은 기도제목 ${S.results.length}건.`);
@@ -1008,6 +1045,8 @@ export function createPrayer(deps) {
     'prayer-mode': async (el) => { S.mode = el.dataset.mode; S.editMember = null; S.editAdmin = null; S.results = []; S.editing.clear(); await render(); $('#prayer-modes [aria-pressed="true"]')?.focus(); },
     'prayer-copy': (el) => { const p = prayerById(el.dataset.id); if (p) copyText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
     'prayer-share': (el) => { const p = prayerById(el.dataset.id); if (p) shareText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
+    'prayer-copy-all': () => { if (S.results.length) copyText(resultsText(), `기도제목 ${S.results.length}건을 복사했습니다.`); },
+    'prayer-share-all': () => { if (S.results.length) shareText(resultsText()); },
     'prayer-edit': (el) => { const p = prayerById(el.dataset.id); if (p) { S.editing.add(p.id); replaceCard(p, 'prayer-save'); cardEl(p.id)?.querySelector('[data-field="content"]')?.focus(); } },
     'prayer-close': (el) => { const p = prayerById(el.dataset.id); if (p) { S.editing.delete(p.id); replaceCard(p, 'prayer-edit'); } },
     'prayer-save': (el) => saveCard(el.dataset.id),

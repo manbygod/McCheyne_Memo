@@ -379,7 +379,7 @@ button.chip { cursor: pointer; color: inherit; }
 .prayer-invite .prayer-subtitle { margin-top: 4px; }
 .prayer-invite__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .prayer-invite__row .prayer-field { flex: 1 1 180px; min-width: 0; }
-.prayer-danger { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+.prayer-danger { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--c-border); }
 
 .toast {
   position: fixed; left: 50%; bottom: 80px; transform: translateX(-50%);

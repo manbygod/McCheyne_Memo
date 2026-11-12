@@ -763,7 +763,7 @@ function spanLabel(s) {
 /** 기도방: 처음 "기도"를 열 때만 prayer.js 를 불러온다 */
 let prayerPromise = null;
 function withPrayer(run) {
-  prayerPromise ??= import('./prayer.js?v=2026-11-12p').then((m) => m.createPrayer({
+  prayerPromise ??= import('./prayer.js?v=2026-11-12s').then((m) => m.createPrayer({
     $, h, mount, toast, fb: () => state.fb, user: () => state.user, copyText, shareText, weekday: weekdayChar, today: () => toISODate(),
   })).catch((e) => { prayerPromise = null; throw e; });
   return prayerPromise.then(run).catch((e) => { console.error('[prayer]', e); toast('기도 화면을 불러오지 못했습니다.'); });

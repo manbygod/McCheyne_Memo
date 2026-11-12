@@ -152,6 +152,26 @@ export function editPatch(p, { content, response }, now, email) {
 /** 오류 목록을 화면용으로 줄임 (너무 길면 앞부분만) */
 export const limitErrors = (errors, max = MAX_SHOWN) => (errors.length > max ? [...errors.slice(0, max), `… 외 ${errors.length - max}건`] : errors);
 
+/** CSV 한 칸: 쉼표·큰따옴표·줄바꿈이 있으면 "..." 로 묶고 안의 "는 "" 로. 엑셀에서 수식으로 실행될 수 있는 시작(= + @, 붙어 있는 -)은 앞에 ' 를 붙여 막는다 */
+export function csvCell(value) {
+  let s = String(value ?? '').replace(/\r\n?/g, '\n');
+  if (/^[=+@]/.test(s) || /^-\S/.test(s)) s = `'${s}`;
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * 기도제목 → CSV 글. 가져오기와 같은 4칸(게시자,게시일,기도 제목,기도 응답)이라 내보낸 파일을 그대로 다시 가져올 수 있다.
+ * 게시일은 기도제목 마지막 수정일시의 날짜(YYYY-MM-DD), 오래된 것부터. 한글 엑셀이 바로 열도록 앞에 BOM 을 붙인다
+ */
+export function prayersToCsv(prayers) {
+  const rows = [...prayers].sort((a, b) => a.contentUpdatedAt.localeCompare(b.contentUpdatedAt) || a.author.localeCompare(b.author, 'ko'))
+    .map((p) => [p.author, dayOf(p.contentUpdatedAt), p.content, p.response].map(csvCell).join(','));
+  return `﻿${[CSV_HEADER.join(','), ...rows].join('\r\n')}\r\n`;
+}
+
+/** 내보낼 파일 이름: '기도방 이름_YYYY-MM-DD.csv' (파일 이름에 쓸 수 없는 글자는 뺌) */
+export const exportFileName = (roomName, day) => `${String(roomName).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim() || '기도방'}_${day}.csv`;
+
 /** 'KT 기도노트.csv' → 'KT 기도노트' */
 export const fileBaseName = (name) => String(name).replace(/\.[^./\\]+$/, '').trim();
 
@@ -306,10 +326,14 @@ export function createPrayer(deps) {
     const snap = await fs.getDocs(fs.collection(db, 'prayerAdmins'));
     S.admins = snap.docs.map((d) => cleanAdmin(d.id, d.data())).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }
-  async function loadPrayers(roomId) {
+  /** 기도방의 기도제목을 모두 읽어 돌려줌 (화면 상태는 건드리지 않음) */
+  async function fetchPrayers(roomId) {
     const { db, fs } = fx();
     const snap = await fs.getDocs(fs.collection(db, 'prayerRooms', roomId, 'prayers'));
-    S.prayers = snap.docs.map((d) => cleanPrayer(d.id, d.data())).filter(Boolean);
+    return snap.docs.map((d) => cleanPrayer(d.id, d.data())).filter(Boolean);
+  }
+  async function loadPrayers(roomId) {
+    S.prayers = await fetchPrayers(roomId);
     S.prayersRoom = roomId; // S.prayers 가 어느 기도방의 것인지 (메뉴를 옮겨도 선택한 방과 맞는지 확인용)
     S.loadedAt = Date.now();
   }
@@ -786,7 +810,10 @@ export function createPrayer(deps) {
         h('h3', { class: 'prayer-subtitle' }, '초대할 사람 추가'),
         inviteFields('prayer-member')),
       h('div', { class: 'prayer-danger' },
-        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'prayer-room-delete' }, '이 기도방 삭제')));
+        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'prayer-room-delete' }, '이 기도방 삭제'),
+        // 삭제 오른쪽. 설명은 화면에는 숨기고 스크린리더에만 읽힘
+        h('button', { type: 'button', class: 'btn', id: 'prayer-export', 'data-action': 'prayer-export', 'aria-describedby': 'prayer-export-note' }, 'CSV로 내보내기'),
+        h('p', { class: 'visually-hidden', id: 'prayer-export-note' }, '이 기도방의 기도제목을 가져오기와 같은 형식(게시자, 게시일, 기도 제목, 기도 응답)의 CSV 파일로 저장합니다.')));
   }
 
   function memberRow(room, email) {
@@ -947,6 +974,24 @@ export function createPrayer(deps) {
     toast(email === old ? `${name}(${email}) 정보를 저장했습니다.` : `관리자 계정을 ${email} 으로 바꿨습니다.${moved ? ` 만든 기도방 ${moved}개의 만든 사람도 옮겼습니다.` : ''}`);
   }
 
+  /** 선택한 기도방의 기도제목을 최신 상태로 읽어 CSV 파일로 저장 (관리하는 방에서만 이 화면에 들어올 수 있음) */
+  async function exportCsv() {
+    const room = manageRoom();
+    if (!room) return;
+    const btn = $('#prayer-export');
+    if (btn) btn.disabled = true;
+    try {
+      const prayers = await fetchPrayers(room.id);
+      const url = URL.createObjectURL(new Blob([prayersToCsv(prayers)], { type: 'text/csv;charset=utf-8' }));
+      const a = h('a', { href: url, download: exportFileName(room.name, today()) });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast(prayers.length ? `"${room.name}" 기도제목 ${prayers.length}건을 CSV로 내보냈습니다.` : `"${room.name}" 기도방에 기도제목이 없어 머리글만 내보냈습니다.`);
+    } catch (e) { console.error('[prayer]', e); toast(explainError(e)); } finally { if (btn) { btn.disabled = false; btn.focus(); } }
+  }
+
   async function removeRoom(roomId) {
     const { db, fs } = fx();
     const snap = await fs.getDocs(fs.collection(db, 'prayerRooms', roomId, 'prayers'));
@@ -983,6 +1028,7 @@ export function createPrayer(deps) {
       renderManageDetail();
       document.querySelector(`[data-action="prayer-member-edit"][data-email="${el.dataset.email}"]`)?.focus();
     },
+    'prayer-export': () => exportCsv(),
     'prayer-date-pick': (el) => { // 달력 아이콘 버튼을 눌렀을 때만 달력을 연다
       const native = $(`#${el.dataset.target}-native`);
       const cur = parseDayInput($(`#${el.dataset.target}`).value);

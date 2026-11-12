@@ -358,15 +358,23 @@ button.chip { cursor: pointer; color: inherit; }
 .prayer-members__email { overflow-wrap: anywhere; }
 .prayer-members__actions { display: flex; gap: 8px; flex: none; }
 .prayer-members__item--editing { display: block; }
-/* 날짜 선택: 'YYYY-MM-DD' 글자 위에 투명한 날짜 입력을 겹침 (오늘 화면의 day-picker 와 같은 방식) */
+/* 날짜 입력: 직접 입력 칸 + 달력 아이콘 버튼 (달력은 아이콘을 눌렀을 때만 열림). 달력 전용 날짜 입력은 화면에 보이지 않음 */
 .date-pick {
-  position: relative; display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 8px 10px;
-  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius); cursor: pointer;
+  position: relative; display: inline-flex; align-items: stretch;
+  background: var(--c-surface); border: 1px solid var(--c-border); border-radius: var(--radius);
 }
-.date-pick:has(.date-pick__input:focus-visible) { outline: 3px solid var(--c-focus); outline-offset: 2px; }
-.date-pick__text--empty { color: var(--c-muted); }
+.date-pick__text { font: inherit; color: inherit; background: transparent; border: 0; border-radius: var(--radius) 0 0 var(--radius); padding: 8px 10px; width: 9.5em; min-height: 40px; }
+.date-pick__text[aria-invalid="true"] { box-shadow: inset 0 0 0 2px var(--c-danger); } /* 색 외에 오류 문구도 함께 표시됨 */
+.date-pick__button {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 44px; padding: 0 10px; cursor: pointer;
+  font: inherit; color: var(--c-primary); background: transparent; border: 0; border-left: 1px solid var(--c-border); border-radius: 0 var(--radius) var(--radius) 0;
+}
+.date-pick__button:hover { background: var(--c-primary); color: var(--c-primary-text); }
 .date-pick__icon { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.date-pick__input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.date-pick__native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.date-pick__hint { margin: 2px 0 0; font-size: .85rem; color: var(--c-muted); }
+.date-pick__error { margin: 2px 0 0; font-size: .85rem; color: var(--c-danger); }
+.date-pick__error:empty { display: none; }
 .prayer-invite { padding: 8px 12px 12px; border: 1px solid var(--c-border); border-radius: var(--radius); }
 .prayer-invite .prayer-subtitle { margin-top: 4px; }
 .prayer-invite__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }

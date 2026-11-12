@@ -62,6 +62,18 @@ export function parsePostedDate(s) {
   return `${m[1]}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+/**
+ * 직접 입력한 날짜 검사: 비어 있으면 {ok, value:''}, 'YYYY-MM-DD' 형식이고 실제 있는 날짜일 때만 {ok, value}.
+ * 그 밖(2025/10/03, 2025-1-3, 없는 날짜 등)은 {ok:false, error} — 형식을 고쳐 입력하게 한다
+ */
+export function parseDayInput(text) {
+  const s = String(text).trim();
+  if (!s) return { ok: true, value: '' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok: false, error: '날짜는 연-월-일 형식으로 입력하세요. (예: 2025-10-03)' };
+  if (parsePostedDate(s) !== s) return { ok: false, error: '없는 날짜입니다. 연-월-일을 다시 확인하세요.' };
+  return { ok: true, value: s };
+}
+
 const squash = (s) => String(s).replace(/\s+/g, '');
 const MAX_SHOWN = 30;
 
@@ -442,7 +454,14 @@ export function createPrayer(deps) {
   async function runQuery() {
     if (!S.roomId) { toast('기도방을 선택하세요.'); $('#prayer-room')?.focus(); return; }
     const kind = S.kind;
-    if (S.period === 'range' && S.from && S.to && S.from > S.to) { toast('시작일이 종료일보다 늦습니다.'); $('#prayer-from')?.focus(); return; }
+    if (S.period === 'range') { // 직접 입력한 날짜는 형식을 검사한다 (연-월-일, 실제 있는 날짜)
+      const a = readDate('prayer-from');
+      const b = readDate('prayer-to');
+      if (!a.ok || !b.ok) { toast(!a.ok ? `시작일: ${a.error}` : `종료일: ${b.error}`); $(!a.ok ? '#prayer-from' : '#prayer-to')?.focus(); return; }
+      S.from = a.value;
+      S.to = b.value;
+      if (S.from && S.to && S.from > S.to) { toast('시작일이 종료일보다 늦습니다.'); $('#prayer-from')?.focus(); return; }
+    }
     try {
       if (Date.now() - S.loadedAt > 30000) await loadPrayers(S.roomId); // 다른 사람이 새로 올린 기도제목 반영
     } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
@@ -599,7 +618,6 @@ export function createPrayer(deps) {
     renderInvitees();
   }
 
-  const NO_DATE = '연-월-일';
   const calendarIcon = () => {
     const ns = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(ns, 'svg');
@@ -611,20 +629,35 @@ export function createPrayer(deps) {
     svg.append(path);
     return svg;
   };
-  /** 날짜 선택: 브라우저의 기본 표시(mm/dd/yyyy 등)는 바꿀 수 없어, 'YYYY-MM-DD' 글자 위에 투명한 날짜 입력을 겹친다 (오늘 화면과 같은 방식) */
+  /**
+   * 날짜 입력: 직접 입력(연-월-일, 형식 검사) + 달력 아이콘 버튼. 달력은 아이콘 버튼을 눌렀을 때만 열린다.
+   * 브라우저의 날짜 칸은 표시 형식(mm/dd/yyyy)을 바꿀 수 없고 칸을 누르면 달력이 열려 버려서,
+   * 글 입력칸과 달력 전용 날짜 입력(화면에 보이지 않고 아이콘 버튼이 showPicker 로 여는 것)으로 나눈다
+   */
   function datePick(id, label, value, fieldName) {
     return h('div', { class: 'prayer-field' },
       h('label', { class: 'field__label', for: id }, label),
       h('span', { class: 'date-pick' },
-        h('span', { class: `date-pick__text${value ? '' : ' date-pick__text--empty'}`, id: `${id}-text`, 'aria-hidden': 'true' }, value || NO_DATE),
-        calendarIcon(),
-        h('input', { class: 'date-pick__input', type: 'date', id, value, 'data-prayer-field': fieldName })));
+        h('input', { class: 'date-pick__text', type: 'text', id, value, inputmode: 'numeric', maxlength: '10', autocomplete: 'off', placeholder: 'YYYY-MM-DD', 'aria-describedby': `${id}-hint`, 'data-prayer-field': fieldName }),
+        h('button', { type: 'button', class: 'date-pick__button', 'data-action': 'prayer-date-pick', 'data-target': id, 'aria-label': `${label} 달력 열기` }, calendarIcon()),
+        h('input', { class: 'date-pick__native', type: 'date', id: `${id}-native`, tabindex: '-1', 'aria-hidden': 'true', 'data-prayer-field': `${fieldName}-native`, 'data-target': id })),
+      h('p', { class: 'date-pick__hint', id: `${id}-hint` }, '연-월-일 (예: 2025-10-03)'),
+      h('p', { class: 'date-pick__error', id: `${id}-error`, role: 'alert' }));
   }
-  const showPickedDate = (el) => {
-    const text = $(`#${el.id}-text`);
-    text.textContent = el.value || NO_DATE;
-    text.classList.toggle('date-pick__text--empty', !el.value);
-  };
+  /** 날짜 칸의 오류 표시를 갱신 (role=alert 라 스크린리더가 바로 읽음) */
+  function setDateError(id, message) {
+    const input = $(`#${id}`);
+    const err = $(`#${id}-error`);
+    if (!input || !err) return;
+    err.textContent = message;
+    if (message) { input.setAttribute('aria-invalid', 'true'); input.setAttribute('aria-describedby', `${id}-hint ${id}-error`); } else { input.removeAttribute('aria-invalid'); input.setAttribute('aria-describedby', `${id}-hint`); }
+  }
+  /** 날짜 칸을 읽어 형식을 검사 → {ok, value}. 잘못이면 오류를 표시 */
+  function readDate(id) {
+    const r = parseDayInput($(`#${id}`)?.value ?? '');
+    setDateError(id, r.ok ? '' : r.error);
+    return r;
+  }
 
   /** 지메일 계정 + 이름 입력칸과 추가 버튼 (id 접두사로 화면마다 구분) */
   function inviteFields(prefix) {
@@ -950,6 +983,12 @@ export function createPrayer(deps) {
       renderManageDetail();
       document.querySelector(`[data-action="prayer-member-edit"][data-email="${el.dataset.email}"]`)?.focus();
     },
+    'prayer-date-pick': (el) => { // 달력 아이콘 버튼을 눌렀을 때만 달력을 연다
+      const native = $(`#${el.dataset.target}-native`);
+      const cur = parseDayInput($(`#${el.dataset.target}`).value);
+      native.value = cur.ok ? cur.value : '';
+      try { native.showPicker(); } catch { toast('이 브라우저에서는 달력을 열 수 없습니다. 날짜를 직접 입력하세요.'); }
+    },
     'prayer-create-empty': () => doCreate($('#prayer-create-form'), { empty: true }),
     'prayer-admin-edit': (el) => { S.editAdmin = el.dataset.email; renderAdmins(); $('#prayer-admin-edit-email')?.focus(); },
     'prayer-admin-edit-cancel': (el) => { S.editAdmin = null; renderAdmins(); editAdminBtn(el.dataset.email)?.focus(); },
@@ -1047,8 +1086,16 @@ export function createPrayer(deps) {
       } else if (f === 'author-name') el.dataset.touched = '1';
       else if (f === 'manage-room') { S.manageId = el.value; S.editMember = null; renderManageDetail(); }
       else if (f === 'period') { S.period = el.value; $('#prayer-range').hidden = S.period !== 'range'; }
-      else if (f === 'from') { S.from = el.value; showPickedDate(el); }
-      else if (f === 'to') { S.to = el.value; showPickedDate(el); }
+      else if (f === 'from' || f === 'to') { const r = readDate(`prayer-${f}`); if (r.ok) S[f] = r.value; } // 직접 입력: 형식이 맞을 때만 반영, 틀리면 오류 표시
+      else if (f === 'from-native' || f === 'to-native') { // 달력에서 고른 날짜를 입력칸에 채움
+        const name = f.replace('-native', '');
+        const input = $(`#${el.dataset.target}`);
+        input.value = el.value;
+        S[name] = el.value;
+        setDateError(el.dataset.target, '');
+        say(`${name === 'from' ? '시작일' : '종료일'} ${el.value} 선택`);
+        input.focus();
+      }
       else if (f === 'author-all') {
         S.authors = el.checked ? new Set(authorsOf(S.prayers)) : new Set();
         document.querySelectorAll('[data-prayer-field="author"]').forEach((c) => { c.checked = el.checked; });

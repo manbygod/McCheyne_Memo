@@ -405,7 +405,7 @@ export function createChat(deps) {
     if (!dailyUsage(readDay(), deps.today()).allowed) { toast(`오늘은 질문 ${LIMITS.dailyQuestions}회를 모두 사용했습니다. 내일 다시 이용해 주세요.`); return; }
     const box = $('#chat-memos');
     if (!box.checked && /메모/.test(question) && deps.memos().length
-      && window.confirm('질문에 "메모"가 들어 있습니다.\n내 메모를 함께 AI(Google Gemini)로 보낼까요?\n(무료 서비스에서는 입력 내용이 서비스 개선에 쓰일 수 있습니다.)')) box.checked = true;
+      && window.confirm('질문에 "메모"가 들어 있습니다.\n내 메모를 함께 AI(Google Gemini)로 보낼까요?\n(무료 서비스에서는 입력 내용이 서비스 개선에 쓰일 수 있고, 보낸 내용은 이 앱에서 지울 수 없습니다.)')) box.checked = true;
     $('#chat-log').querySelector('.chat__message--ask')?.remove();
     const day = box.checked ? memoDayIntent(question, deps.today()) : null;
     const intent = day && (choice || day.intent);

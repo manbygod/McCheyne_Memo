@@ -810,7 +810,7 @@ export function createPrayer(deps) {
         h('h3', { class: 'prayer-subtitle' }, '초대할 사람 추가'),
         inviteFields('prayer-member')),
       h('div', { class: 'prayer-danger' },
-        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'prayer-room-delete' }, '이 기도방 삭제'),
+        h('button', { type: 'button', class: 'btn btn--danger', 'data-action': 'prayer-room-delete' }, '기도방 삭제'),
         // 삭제 오른쪽. 설명은 화면에는 숨기고 스크린리더에만 읽힘
         h('button', { type: 'button', class: 'btn', id: 'prayer-export', 'data-action': 'prayer-export', 'aria-describedby': 'prayer-export-note' }, 'CSV로 내보내기'),
         h('p', { class: 'visually-hidden', id: 'prayer-export-note' }, '이 기도방의 기도제목을 가져오기와 같은 형식(게시자, 게시일, 기도 제목, 기도 응답)의 CSV 파일로 저장합니다.')));

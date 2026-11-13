@@ -63,15 +63,18 @@ export function parsePostedDate(s) {
 }
 
 /**
- * 직접 입력한 날짜 검사: 비어 있으면 {ok, value:''}, 'YYYY-MM-DD' 형식이고 실제 있는 날짜일 때만 {ok, value}.
- * 그 밖(2025/10/03, 2025-1-3, 없는 날짜 등)은 {ok:false, error} — 형식을 고쳐 입력하게 한다
+ * 직접 입력한 날짜 검사·정리: 비어 있으면 {ok, value:''}.
+ * 숫자 8자리(20251003)나 구분 기호 형식(2025-10-03, 2025-1-3, 2025/10/03, 2025.10.03)을 받아 항상 'YYYY-MM-DD' 로 바꿔 돌려준다.
+ * 연도 두 자리·7자리처럼 해석이 갈리는 입력과 실제 없는 날짜(2025-02-30)는 {ok:false, error}
  */
 export function parseDayInput(text) {
   const s = String(text).trim();
   if (!s) return { ok: true, value: '' };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { ok: false, error: '날짜는 연-월-일 형식으로 입력하세요. (예: 2025-10-03)' };
-  if (parsePostedDate(s) !== s) return { ok: false, error: '없는 날짜입니다. 연-월-일을 다시 확인하세요.' };
-  return { ok: true, value: s };
+  const m = /^(\d{4})(\d{2})(\d{2})$/.exec(s) ?? /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\.?$/.exec(s);
+  if (!m) return { ok: false, error: '날짜는 연-월-일 형식으로 입력하세요. 숫자만 입력해도 됩니다. (예: 20251003 또는 2025-10-03)' };
+  const day = parsePostedDate(`${m[1]}-${m[2]}-${m[3]}`);
+  if (!day) return { ok: false, error: '없는 날짜입니다. 연-월-일을 다시 확인하세요.' };
+  return { ok: true, value: day };
 }
 
 const squash = (s) => String(s).replace(/\s+/g, '');
@@ -709,7 +712,7 @@ export function createPrayer(deps) {
         h('input', { class: 'date-pick__text', type: 'text', id, value, inputmode: 'numeric', maxlength: '10', autocomplete: 'off', placeholder: 'YYYY-MM-DD', 'aria-describedby': `${id}-hint`, 'data-prayer-field': fieldName }),
         h('button', { type: 'button', class: 'date-pick__button', 'data-action': 'prayer-date-pick', 'data-target': id, 'aria-label': `${label} 달력 열기` }, calendarIcon()),
         h('input', { class: 'date-pick__native', type: 'date', id: `${id}-native`, tabindex: '-1', 'aria-hidden': 'true', 'data-prayer-field': `${fieldName}-native`, 'data-target': id })),
-      h('p', { class: 'date-pick__hint', id: `${id}-hint` }, '연-월-일 (예: 2025-10-03)'),
+      h('p', { class: 'date-pick__hint', id: `${id}-hint` }, '연-월-일, 숫자만 입력해도 됩니다 (예: 20251003)'),
       h('p', { class: 'date-pick__error', id: `${id}-error`, role: 'alert' }));
   }
   /** 날짜 칸의 오류 표시를 갱신 (role=alert 라 스크린리더가 바로 읽음) */
@@ -722,8 +725,10 @@ export function createPrayer(deps) {
   }
   /** 날짜 칸을 읽어 형식을 검사 → {ok, value}. 잘못이면 오류를 표시 */
   function readDate(id) {
-    const r = parseDayInput($(`#${id}`)?.value ?? '');
+    const el = $(`#${id}`);
+    const r = parseDayInput(el?.value ?? '');
     setDateError(id, r.ok ? '' : r.error);
+    if (r.ok && el && el.value !== r.value) { el.value = r.value; r.changed = true; } // 20251003 같은 입력은 칸에도 2025-10-03 으로 정리해 보여 줌
     return r;
   }
 
@@ -1175,7 +1180,13 @@ export function createPrayer(deps) {
       } else if (f === 'author-name') el.dataset.touched = '1';
       else if (f === 'manage-room') { S.manageId = el.value; S.editMember = null; renderManageDetail(); }
       else if (f === 'period') { S.period = el.value; $('#prayer-range').hidden = S.period !== 'range'; }
-      else if (f === 'from' || f === 'to') { const r = readDate(`prayer-${f}`); if (r.ok) S[f] = r.value; } // 직접 입력: 형식이 맞을 때만 반영, 틀리면 오류 표시
+      else if (f === 'from' || f === 'to') { // 직접 입력: 칸을 벗어나거나 Enter 를 누르면 YYYY-MM-DD 로 정리해 반영, 형식이 틀리면 오류 표시
+        const r = readDate(`prayer-${f}`);
+        if (r.ok) {
+          S[f] = r.value;
+          if (r.changed && r.value) say(`${f === 'from' ? '시작일' : '종료일'} ${r.value}로 입력했습니다.`);
+        }
+      }
       else if (f === 'from-native' || f === 'to-native') { // 달력에서 고른 날짜를 입력칸에 채움
         const name = f.replace('-native', '');
         const input = $(`#${el.dataset.target}`);

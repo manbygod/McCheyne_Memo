@@ -550,21 +550,27 @@ export function createPrayer(deps) {
     const editing = S.editing.has(p.id);
     const who = `${p.author} ${p.postedOn}`;
     const btn = (action, label, extra = {}) => h('button', { type: 'button', class: `btn${extra.danger ? ' btn--danger' : ''}${extra.primary ? ' btn--primary' : ''}`, 'data-action': action, 'data-id': p.id, 'aria-label': `${who} 기도제목 ${label}` }, label);
+    const contentDay = formatDay(p.postedOn, weekday);
+    const responseDay = p.response ? formatDay(dayOf(p.responseUpdatedAt || p.contentUpdatedAt), weekday) : '';
+    // "기도제목 2026-09-12(토)", "기도응답 2026-09-12(토)": 눈에 띄는 라벨 + 날짜 (날짜는 이름 옆이 아니라 각 내용 옆)
+    const label = (title, day, htmlFor) => h(htmlFor ? 'label' : 'p', { class: 'prayer-card__label', for: htmlFor },
+      h('span', { class: 'prayer-card__label-title' }, title), day ? h('span', { class: 'prayer-card__label-date' }, day) : null);
     return h('li', { class: `prayer-card${editing ? ' prayer-card--editing' : ''}`, 'data-id': p.id },
-      h('h3', { class: 'prayer-card__head' }, h('span', { class: 'prayer-card__author' }, p.author), ' ', h('span', { class: 'prayer-card__date' }, formatDay(p.postedOn, weekday))),
+      // 제목에는 이름만 보이고, 같은 사람의 카드를 제목 이동으로 구분할 수 있도록 날짜는 화면에서만 숨김
+      h('h3', { class: 'prayer-card__head' }, h('span', { class: 'prayer-card__author' }, p.author), h('span', { class: 'visually-hidden' }, `, ${contentDay} 게시`)),
       editing
         ? [
-          h('label', { class: 'field__label', for: `pc-${p.id}` }, '기도제목'),
+          label('기도제목', contentDay, `pc-${p.id}`),
           h('textarea', { class: 'field__control', id: `pc-${p.id}`, rows: '6', maxlength: String(LIMITS.content), 'data-field': 'content' }, p.content),
-          h('label', { class: 'field__label', for: `pr-${p.id}` }, '기도응답'),
+          label('기도응답', responseDay, `pr-${p.id}`),
           h('textarea', { class: 'field__control', id: `pr-${p.id}`, rows: '4', maxlength: String(LIMITS.content), 'data-field': 'response' }, p.response),
           h('p', { class: 'view__note' }, '기도제목을 고치면 게시 날짜가, 기도응답을 고치면 기도응답 날짜가 오늘로 바뀝니다.'),
         ]
         : [
-          h('p', { class: 'prayer-card__label' }, '기도제목'),
+          label('기도제목', contentDay),
           h('p', { class: 'prayer-card__body' }, p.content),
           // h() 는 배열을 한 단계만 펼치므로 중첩 배열 대신 펼쳐서 넣는다
-          ...(p.response ? [h('p', { class: 'prayer-card__label' }, `기도응답 ${formatDay(dayOf(p.responseUpdatedAt || p.contentUpdatedAt), weekday)}`), h('p', { class: 'prayer-card__body prayer-card__body--response' }, p.response)] : []),
+          ...(p.response ? [label('기도응답', responseDay), h('p', { class: 'prayer-card__body prayer-card__body--response' }, p.response)] : []),
         ],
       h('div', { class: 'prayer-card__actions' },
         btn('prayer-copy', '복사'), btn('prayer-share', '공유'),
@@ -1043,7 +1049,14 @@ export function createPrayer(deps) {
 
   /* ---- 이벤트 (app.js 가 data-prayer 영역의 이벤트를 넘겨 준다) ---- */
   const actions = {
-    'prayer-mode': async (el) => { S.mode = el.dataset.mode; S.editMember = null; S.editAdmin = null; S.results = []; S.editing.clear(); await render(); $('#prayer-modes [aria-pressed="true"]')?.focus(); },
+    'prayer-mode': async (el) => {
+      S.mode = el.dataset.mode;
+      S.editMember = null; S.editAdmin = null; S.results = []; S.editing.clear();
+      if (S.mode === 'search' || S.mode === 'edit') { // 상단 버튼으로 들어올 때는 조건을 "전체"로 되돌린다 (결과는 비워지므로 조건만 남지 않게). 기도방 선택은 유지
+        S.period = 'all'; S.from = ''; S.to = '';
+        S.authors = new Set(authorsOf(S.prayers));
+      }
+      await render(); $('#prayer-modes [aria-pressed="true"]')?.focus(); },
     'prayer-copy': (el) => { const p = prayerById(el.dataset.id); if (p) copyText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
     'prayer-share': (el) => { const p = prayerById(el.dataset.id); if (p) shareText(prayerText(p, roomById(S.roomId)?.name ?? '', weekday)); },
     'prayer-copy-all': () => { if (S.results.length) copyText(resultsText(), `기도제목 ${S.results.length}건을 복사했습니다.`); },

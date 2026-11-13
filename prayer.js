@@ -308,10 +308,10 @@ export function createPrayer(deps) {
   /** 관리자 기능을 쓸 수 있는 기도방인가 (내가 만들었거나 구성원인 방, 관리자 계정일 때만) */
   const canManage = (room) => managesRoom(room, me()?.email, S.role ?? {});
   const manageHere = () => canManage(roomById(S.roomId)); // 지금 선택한 기도방
-  /** 편집·삭제할 수 있는가: 내 기도제목이거나, 내가 관리하는 기도방 */
-  const canEdit = (p) => manageHere() || isMineIn(p);
-  /** 게시자 선택 칸을 보이는가: 검색, 그리고 모든 기도제목을 다루는 (내가 관리하는 방의) 편집 */
-  const withAuthors = (kind) => kind === 'search' || manageHere();
+  /** 카드에서 편집·삭제할 수 있는가. 편집 화면은 누구든 내 기도제목만, 검색 화면은 내 기도제목이거나 내가 관리하는 기도방의 모든 기도제목 */
+  const canEdit = (p) => isMineIn(p) || (S.kind === 'search' && manageHere());
+  /** 게시자 선택 칸은 검색 화면에만 (편집 화면은 누구든 내 기도제목만) */
+  const withAuthors = (kind) => kind === 'search';
   const say = (msg) => { $('#prayer-status').textContent = ''; setTimeout(() => { $('#prayer-status').textContent = msg; }, 50); };
   const panel = () => $('#prayer-panel');
   const fx = () => fb();
@@ -443,8 +443,8 @@ export function createPrayer(deps) {
   }
 
   /** 편집 화면의 문구: 내가 관리하는 방이면 모든 기도제목, 아니면 내 기도제목만 */
-  const periodLegend = (kind) => (kind === 'edit' && !manageHere() ? '내가 게시한 날짜' : '기도제목 게시 날짜');
-  const queryButtonText = (kind) => (kind === 'edit' && !manageHere() ? '내 기도제목 검색' : '검색');
+  const periodLegend = (kind) => (kind === 'edit' ? '내가 게시한 날짜' : '기도제목 게시 날짜');
+  const queryButtonText = (kind) => (kind === 'edit' ? '내 기도제목 검색' : '검색');
   function syncQueryLabels() {
     const legend = $('#prayer-period-legend');
     if (legend) legend.textContent = periodLegend(S.kind);
@@ -468,7 +468,7 @@ export function createPrayer(deps) {
     if (!box) return;
     if (!S.roomId || !withAuthors(S.kind)) { mount(box); return; }
     const names = authorsOf(S.prayers);
-    const lead = S.kind === 'edit' ? [h('p', { class: 'view__note' }, '이 기도방의 관리자이므로 모든 기도제목을 편집·삭제할 수 있습니다.')] : [];
+    const lead = []; // (검색 화면에는 안내 문구 없음)
     if (S.prayersRoom !== S.roomId) { mount(box, ...lead, h('p', { class: 'view__note' }, '기도제목을 불러오는 중입니다...')); return; }
     if (!names.length) { mount(box, ...lead, h('p', { class: 'view__note' }, '이 기도방에는 아직 기도제목이 없습니다.')); return; }
     const all = names.every((n) => S.authors.has(n));
@@ -528,7 +528,7 @@ export function createPrayer(deps) {
     if (!ul) return;
     mount(ul, S.results.length
       ? S.results.map(card)
-      : h('li', { class: 'view__note' }, S.resultsKind === 'edit' && !manageHere() ? '조건에 맞는 내 기도제목이 없습니다.' : '조건에 맞는 기도제목이 없습니다.'));
+      : h('li', { class: 'view__note' }, S.resultsKind === 'edit' ? '조건에 맞는 내 기도제목이 없습니다.' : '조건에 맞는 기도제목이 없습니다.'));
     syncBulk();
   }
 
@@ -568,9 +568,10 @@ export function createPrayer(deps) {
         ],
       h('div', { class: 'prayer-card__actions' },
         btn('prayer-copy', '복사'), btn('prayer-share', '공유'),
-        mine && !editing ? (S.kind === 'edit' ? btn('prayer-edit', '편집') : btn('prayer-goto-edit', '편집')) : null,
+        // "편집"은 어디서나 같다: 누르면 그 카드가 입력칸으로 바뀌고 포커스가 그리로 간다
+        mine && !editing ? btn('prayer-edit', '편집') : null,
         mine && editing ? [btn('prayer-save', '저장', { primary: true }), btn('prayer-close', '닫기')] : null,
-        mine && S.kind === 'edit' ? btn('prayer-delete', '삭제', { danger: true }) : null));
+        mine ? btn('prayer-delete', '삭제', { danger: true }) : null)); // 검색 결과 카드에도 삭제 (복사·공유·편집 옆)
   }
 
   const prayerById = (id) => S.results.find((p) => p.id === id) ?? S.prayers.find((p) => p.id === id);
@@ -1051,16 +1052,6 @@ export function createPrayer(deps) {
     'prayer-close': (el) => { const p = prayerById(el.dataset.id); if (p) { S.editing.delete(p.id); replaceCard(p, 'prayer-edit'); } },
     'prayer-save': (el) => saveCard(el.dataset.id),
     'prayer-delete': (el) => deleteCard(el.dataset.id),
-    'prayer-goto-edit': async (el) => { // 검색 결과에서 내 기도제목을 편집으로: 그 게시일만 조회해 편집 상태로 연다
-      const p = prayerById(el.dataset.id);
-      if (!p) return;
-      Object.assign(S, { mode: 'edit', period: 'range', from: p.postedOn, to: p.postedOn, results: [] });
-      S.editing = new Set([p.id]);
-      S.authors = new Set([p.author]); // 관리자의 편집 화면에서도 그 게시자만 조회
-      await render();
-      await runQuery();
-      cardEl(p.id)?.querySelector('[data-field="content"]')?.focus();
-    },
     'prayer-member-edit': (el) => { S.editMember = el.dataset.email; renderManageDetail(); $('#prayer-edit-email')?.focus(); },
     'prayer-member-edit-cancel': (el) => {
       S.editMember = null;

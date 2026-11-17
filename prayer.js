@@ -637,10 +637,39 @@ export function createPrayer(deps) {
     if (!S.roomId && roomsOf().length === 1) S.roomId = roomsOf()[0].id; // 기도방이 하나뿐이면 미리 선택
     mount(panel(), h('form', { class: 'prayer-form', 'data-prayer-form': 'post' },
       roomSelect('prayer-room', roomsOf(), S.roomId),
-      field('게시자', h('input', { class: 'field__control', type: 'text', id: 'prayer-author', maxlength: String(LIMITS.author), required: true, autocomplete: 'off', value: defaultAuthor(roomById(S.roomId)), 'data-prayer-field': 'author-name' }), 'prayer-author'),
+      h('div', { id: 'prayer-author-box' }),
       h('p', { class: 'prayer-date' }, `게시 날짜: ${formatDay(today(), weekday)} (자동 입력)`),
       field('기도제목', h('textarea', { class: 'field__control', id: 'prayer-content', rows: '8', maxlength: String(LIMITS.content), required: true }), 'prayer-content'),
       h('button', { type: 'submit', class: 'btn btn--primary' }, '게시')));
+    renderAuthorBox();
+  }
+
+  /** 대신 게시할 구성원 목록의 글자: 나는 "이름 (나)", 다른 사람은 "이름 (이메일)" (이름이 없으면 이메일) */
+  function memberLabel(room, email) {
+    const name = room?.memberNames?.[nameKey(email)];
+    if (email === me().email) return `${name || me().name} (나)`;
+    return name ? `${name} (${email})` : email;
+  }
+
+  /**
+   * 게시자 칸. 내가 관리하는 기도방(관리자는 만들었거나 구성원인 방, 슈퍼관리자는 모든 방)이면 그 방의 구성원 중에서 골라 대신 게시할 수 있고(기본값은 나),
+   * 그 밖에는 내 이름이 기본값인 입력칸이다. keepText 는 방을 바꿀 때 직접 고쳐 쓴 이름을 유지하려는 값
+   */
+  function renderAuthorBox(keepText = null) {
+    const box = $('#prayer-author-box');
+    if (!box) return;
+    const room = roomById(S.roomId);
+    if (room && canManage(room)) {
+      const others = room.members.filter((e) => e !== me().email).sort((a, b) => memberLabel(room, a).localeCompare(memberLabel(room, b), 'ko'));
+      mount(box,
+        field('게시자 (구성원을 골라 대신 게시할 수 있습니다)', h('select', { class: 'field__control', id: 'prayer-author', 'aria-describedby': 'prayer-author-note', 'data-prayer-field': 'author-pick' },
+          [me().email, ...others].map((e) => h('option', { value: e }, memberLabel(room, e)))), 'prayer-author'),
+        h('p', { class: 'view__note', id: 'prayer-author-note' }, '다른 구성원을 고르면 그 사람의 기도제목으로 올라가고, 그 사람이 편집할 수 있습니다.'));
+      return;
+    }
+    const input = h('input', { class: 'field__control', type: 'text', id: 'prayer-author', maxlength: String(LIMITS.author), required: true, autocomplete: 'off', value: keepText ?? defaultAuthor(room), 'data-prayer-field': 'author-name' });
+    if (keepText != null) input.dataset.touched = '1';
+    mount(box, field('게시자', input, 'prayer-author'));
   }
 
   /** 게시자 기본값: 그 기도방에 등록된 내 이름. 방을 고르기 전에는 어느 방에서든 등록된 내 이름, 없으면 Google 계정 이름 */
@@ -650,21 +679,27 @@ export function createPrayer(deps) {
     const roomId = $('#prayer-room').value;
     const ta = $('#prayer-content');
     const authorEl = $('#prayer-author');
-    const author = authorEl.value.trim().replace(/\s+/g, ' ');
     const content = ta.value.replace(/\r\n?/g, '\n').trim();
     if (!roomId) { toast('기도방을 선택하세요.'); $('#prayer-room').focus(); return; }
-    if (!author) { toast('게시자 이름을 입력하세요.'); authorEl.focus(); return; }
-    if (!content) { toast('기도제목을 입력하세요.'); ta.focus(); return; }
     S.roomId = roomId;
     const room = roomById(roomId);
-    const doc = newPrayerDoc({ author, authorEmail: me().email, content }, nowISO());
+    // 게시자: 관리하는 방에서는 고른 구성원(그 사람의 이름·지메일로 올라가 그 사람이 편집할 수 있음), 그 밖에는 입력한 이름과 내 지메일
+    let author;
+    let authorEmail = me().email;
+    if (authorEl.tagName === 'SELECT') {
+      authorEmail = authorEl.value;
+      author = authorEmail === me().email ? (myName(room) || me().name).slice(0, LIMITS.author) : (room?.memberNames?.[nameKey(authorEmail)] || authorEmail.split('@')[0]).slice(0, LIMITS.author);
+    } else author = authorEl.value.trim().replace(/\s+/g, ' ');
+    if (!author) { toast('게시자 이름을 입력하세요.'); authorEl.focus(); return; }
+    if (!content) { toast('기도제목을 입력하세요.'); ta.focus(); return; }
+    const doc = newPrayerDoc({ author, authorEmail, content }, nowISO());
     try {
       const { db, fs } = fx();
       await fs.addDoc(fs.collection(db, 'prayerRooms', roomId, 'prayers'), doc);
     } catch (e) { console.error('[prayer]', e); toast(explainError(e)); return; }
     ta.value = '';
     S.loadedAt = 0;
-    toast(`${room?.name ?? '기도방'}에 게시했습니다.`);
+    toast(authorEmail === me().email ? `${room?.name ?? '기도방'}에 게시했습니다.` : `${room?.name ?? '기도방'}에 ${author} 님의 기도제목으로 게시했습니다.`);
     ta.focus();
   }
 
@@ -1175,8 +1210,9 @@ export function createPrayer(deps) {
       if (f === 'room') {
         if (S.mode !== 'post') { selectRoom(el.value); return; }
         S.roomId = el.value;
-        const author = $('#prayer-author');
-        if (author && !author.dataset.touched) author.value = defaultAuthor(roomById(S.roomId)); // 직접 고친 이름은 유지
+        const prev = $('#prayer-author');
+        renderAuthorBox(prev?.tagName === 'INPUT' && prev.dataset.touched ? prev.value : null); // 방에 따라 이름 입력칸 ↔ 구성원 선택이 바뀜 (직접 고친 이름은 유지)
+        if ($('#prayer-author')?.tagName === 'SELECT') say('이 기도방의 관리자이므로 게시자를 구성원 중에서 골라 대신 게시할 수 있습니다.');
       } else if (f === 'author-name') el.dataset.touched = '1';
       else if (f === 'manage-room') { S.manageId = el.value; S.editMember = null; renderManageDetail(); }
       else if (f === 'period') { S.period = el.value; $('#prayer-range').hidden = S.period !== 'range'; }

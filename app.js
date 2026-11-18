@@ -1294,7 +1294,31 @@ async function openPassageView(p, alt = false) {
     : h('p', { role: 'alert' }, '본문을 불러오지 못했습니다.'));
   moveDialog(dialog, 0, 0);
   dialog.showModal();
-  $('#passage-view-body').querySelector('.passage-view__verse--linked')?.scrollIntoView({ block: 'center' });
+  revealLinkedVerse($('#passage-view-body'));
+}
+
+/**
+ * 팝업 안의 연결된 절이 화면 가운데 오도록 스크롤한다.
+ * iOS Safari 는 showModal() 직후의 scrollIntoView 를 무시하거나(레이아웃이 자리 잡기 전), 자동 포커스가 다시 맨 위로 되돌려서 1절에 머무는 경우가 있다.
+ * 그래서 스크롤 상자의 scrollTop 을 직접 계산해 넣고, 같은 계산을 다음 프레임과 잠시 뒤에 한 번씩 더 해서 늦게 정해지는 레이아웃·포커스 이동에도 맞춘다 (계산은 몇 번을 해도 같은 자리로 수렴)
+ */
+function revealLinkedVerse(container) {
+  const target = container.querySelector('.passage-view__verse--linked');
+  if (!target) return;
+  let box = target.parentElement; // 가장 가까운 세로 스크롤 상자 (이 팝업에서는 팝업 자신)
+  while (box && box !== document.body && !(box.scrollHeight > box.clientHeight && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+  if (!box || box === document.body) box = container.closest('dialog') ?? container;
+  let stop = false; // 사용자가 직접 스크롤하기 시작하면 더 이상 되돌리지 않음
+  const cancel = () => { stop = true; };
+  ['touchstart', 'wheel', 'keydown', 'pointerdown'].forEach((type) => box.addEventListener(type, cancel, { once: true, passive: true }));
+  const place = () => {
+    if (stop || !target.isConnected) return; // 이미 닫았다가 다른 본문으로 다시 열어 내용이 바뀐 뒤에 남은 예약은 건너뜀 (없어진 절의 위치(0)로 계산하면 맨 위로 되돌려짐)
+    const b = box.getBoundingClientRect();
+    const t = target.getBoundingClientRect();
+    box.scrollTop += (t.top - b.top - box.clientTop) - (box.clientHeight - t.height) / 2; // 연결된 절의 가운데를 상자 가운데로
+  };
+  place();
+  requestAnimationFrame(() => { place(); [150, 350, 600].forEach((ms) => setTimeout(place, ms)); });
 }
 
 /** 선택기에서 고른 한 구절을 말씀 목록에 추가 (같은 장이면 합침, 추가한 순서 유지 — 첫 말씀이 "본문" 링크 대상) */

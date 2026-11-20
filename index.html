@@ -107,14 +107,14 @@
         <p class="view__note" id="import-status-modern" aria-live="polite"></p>
       </section>
       <section class="bible-import" aria-labelledby="import-title-niv">
-        <h3 class="bible-import__title" id="import-title-niv">NIV 본문 가져오기</h3>
-        <p class="view__note" id="import-intro-niv">NIV는 저작권 보호 대상이라 앱에 포함하지 않았습니다. 가지고 계신 본문 파일을 이 기기로 가져오면, 상단 언어에서 "English (NIV, 이 기기)"를 고를 수 있습니다. 가져온 본문은 이 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
-        <p class="view__note" id="import-done-niv" hidden>NIV는 저작권 보호 대상이라 이 기기에만 저장되며 서버로 보내지 않습니다.</p>
+        <h3 class="bible-import__title" id="import-title-niv">NIV성경 본문 가져오기</h3>
+        <p class="view__note" id="import-intro-niv">NIV성경은 저작권 보호 대상이라 앱에 포함하지 않았습니다. 가지고 계신 본문 파일을 이 기기로 가져오면, 상단 언어에서 "English (NIV, 이 기기)"를 고를 수 있습니다. 가져온 본문은 이 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
+        <p class="view__note" id="import-done-niv" hidden>NIV성경은 저작권 보호 대상이라 이 기기에만 저장되며 서버로 보내지 않습니다.</p>
         <p class="visually-hidden" id="import-format-niv">파일 형식은 개역개정성경과 같고 절 본문만 영어입니다. 예: {"gen": {"1": ["verse 1", "verse 2"]}}. 66권 전체 또는 일부를 담을 수 있습니다.</p>
         <div class="bible-import__actions">
-          <button type="button" class="btn" id="import-open-niv" data-action="bible-import" data-version="niv" aria-describedby="import-format-niv import-status-niv">NIV 파일 가져오기</button>
-          <button type="button" class="btn btn--danger" id="import-remove-niv" data-action="bible-remove" data-version="niv" aria-describedby="import-status-niv" hidden>가져온 NIV 삭제</button>
-          <label class="visually-hidden" for="import-file-niv">가져올 NIV JSON 파일 (66권을 담은 파일 하나)</label>
+          <button type="button" class="btn" id="import-open-niv" data-action="bible-import" data-version="niv" aria-describedby="import-format-niv import-status-niv">NIV성경 파일 가져오기</button>
+          <button type="button" class="btn btn--danger" id="import-remove-niv" data-action="bible-remove" data-version="niv" aria-describedby="import-status-niv" hidden>가져온 NIV성경 삭제</button>
+          <label class="visually-hidden" for="import-file-niv">가져올 NIV성경 JSON 파일 (66권을 담은 파일 하나)</label>
           <input type="file" id="import-file-niv" data-import-version="niv" accept="application/json,.json" hidden>
         </div>
         <p class="view__note" id="import-status-niv" aria-live="polite"></p>
@@ -347,6 +347,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-11-20e"></script>
+  <script src="app.js?v=2026-11-20f"></script>
 </body>
 </html>

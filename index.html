@@ -29,6 +29,7 @@
       <select class="field__control" id="lang-select" aria-label="성경 언어 선택">
         <option value="ko">한국어 (개역한글)</option>
         <option value="ko-nkrv" hidden disabled>한국어 (개역개정, 이 기기)</option>
+        <option value="ko-modern" hidden disabled>한국어 (현대어성경, 이 기기)</option>
         <option value="en" lang="en">English (BSB)</option>
         <option value="en-niv" lang="en" hidden disabled>English (NIV, 이 기기)</option>
       </select>
@@ -91,6 +92,19 @@
           <input type="file" id="import-file-nkrv" data-import-version="nkrv" accept="application/json,.json" hidden>
         </div>
         <p class="view__note" id="import-status-nkrv" aria-live="polite"></p>
+      </section>
+      <section class="bible-import" aria-labelledby="import-title-modern">
+        <h3 class="bible-import__title" id="import-title-modern">현대어성경 본문 가져오기</h3>
+        <p class="view__note" id="import-intro-modern">현대어성경은 저작권 보호 대상이라 앱에 포함하지 않았습니다. 가지고 계신 본문 파일을 이 기기로 가져오면, 상단 언어에서 "한국어 (현대어성경, 이 기기)"를 고를 수 있습니다. 가져온 본문은 이 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
+        <p class="view__note" id="import-done-modern" hidden>현대어성경은 저작권 보호 대상이라 이 브라우저에만 저장되며 서버로 보내지 않습니다.</p>
+        <p class="visually-hidden" id="import-format-modern">파일 형식: 책 ID별 JSON 한 파일, 예: {"gen": {"1": ["1절 본문", "2절 본문"]}}. 66권 전체 또는 일부를 담을 수 있고, 다시 가져오면 들어 있는 책만 덮어씁니다.</p>
+        <div class="bible-import__actions">
+          <button type="button" class="btn" id="import-open-modern" data-action="bible-import" data-version="modern" aria-describedby="import-format-modern import-status-modern">현대어성경 파일 가져오기</button>
+          <button type="button" class="btn btn--danger" id="import-remove-modern" data-action="bible-remove" data-version="modern" aria-describedby="import-status-modern" hidden>가져온 현대어성경 삭제</button>
+          <label class="visually-hidden" for="import-file-modern">가져올 현대어성경 JSON 파일 (66권을 담은 파일 하나)</label>
+          <input type="file" id="import-file-modern" data-import-version="modern" accept="application/json,.json" hidden>
+        </div>
+        <p class="view__note" id="import-status-modern" aria-live="polite"></p>
       </section>
       <section class="bible-import" aria-labelledby="import-title-niv">
         <h3 class="bible-import__title" id="import-title-niv">NIV 본문 가져오기</h3>
@@ -333,6 +347,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2026-11-18e"></script>
+  <script src="app.js?v=2026-11-20b"></script>
 </body>
 </html>

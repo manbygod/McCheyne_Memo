@@ -9,11 +9,13 @@ const CREDITS = {
   'ko-nkrv': '성경전서 개역개정판 (대한성서공회) — 이 기기에 가져온 본문',
   en: 'Berean Standard Bible (BSB, Public Domain)',
   'en-niv': 'New International Version (NIV) — 이 기기에 가져온 본문',
+  'ko-modern': '현대어성경 (성서원) — 이 기기에 가져온 본문',
 };
 // 저작권 보호 본문은 번들하지 않고, 사용자가 가져온 파일을 이 기기에만 보관: 번역 ID → 언어·언어 선택값·이름·되돌릴 번들 번역 이름
 const IMPORTED = {
   nkrv: { lang: 'ko', choice: 'ko-nkrv', name: '개역개정', base: '개역한글' },
   niv: { lang: 'en', choice: 'en-niv', name: 'NIV', base: 'BSB' },
+  modern: { lang: 'ko', choice: 'ko-modern', name: '현대어성경', base: '개역한글' },
 };
 
 /* ================= 순수 함수 ================= */
@@ -453,7 +455,7 @@ function validateBookText(data, book) {
 /* ================= 상태 ================= */
 const state = {
   books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null, fbCfg: null, fb: null, // fb = {db, fs}: 기도방(prayer.js)이 같은 Firestore 연결을 씀
-  lang: 'ko', version: null, imported: { nkrv: new Set(), niv: new Set() }, date: toISODate(), query: '', page: 1,
+  lang: 'ko', version: null, imported: { nkrv: new Set(), niv: new Set(), modern: new Set() }, date: toISODate(), query: '', page: 1,
   origin: 'today', // 본문 화면이 어디서 열렸는지 ('today' | 'bible') — 이전/다음 끝에서 돌아갈 곳과 메뉴 강조에 사용
   bible: { bookId: null, ch: 1 }, // 성경 화면에서 고른(또는 마지막으로 읽은) 책·장
   chapter: null, // {bookId, ch, verses:[{n,text}]}
@@ -695,8 +697,8 @@ function mergeMemos(a, b) {
 /* ================= 본문 로딩 ================= */
 const bibleCache = new Map(); // `${lang}.${bookId}` → {장: [절 본문]}
 
-/* 가져온 본문(개역개정·NIV): 번역마다 IndexedDB 저장소 하나에 보관한다 (저장소·서버로 보내지 않음) */
-const IMPORT_DB = { name: 'mccheyne.bible', version: 2 };
+/* 가져온 본문(개역개정·현대어성경·NIV): 번역마다 IndexedDB 저장소 하나에 보관한다 (저장소·서버로 보내지 않음) */
+const IMPORT_DB = { name: 'mccheyne.bible', version: 3 };
 function importOpen() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IMPORT_DB.name, IMPORT_DB.version);

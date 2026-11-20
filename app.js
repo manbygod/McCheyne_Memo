@@ -13,7 +13,7 @@ const CREDITS = {
 };
 // 저작권 보호 본문은 번들하지 않고, 사용자가 가져온 파일을 이 기기에만 보관: 번역 ID → 언어·언어 선택값·이름·되돌릴 번들 번역 이름
 const IMPORTED = {
-  nkrv: { lang: 'ko', choice: 'ko-nkrv', name: '개역개정', base: '개역한글' },
+  nkrv: { lang: 'ko', choice: 'ko-nkrv', name: '개역개정성경', base: '개역한글' },
   niv: { lang: 'en', choice: 'en-niv', name: 'NIV', base: 'BSB' },
   modern: { lang: 'ko', choice: 'ko-modern', name: '현대어성경', base: '개역한글' },
 };

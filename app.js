@@ -1341,7 +1341,7 @@ async function renderVerseViewer() {
         h('span', { class: 'verse-viewer__num' }, n),
         d.lang === 'en' ? null : h('span', { class: 'visually-hidden' }, '절'),
         ' ', byNum.get(n)),
-    ];
+    ].filter(Boolean); // 건너뛴 절이 없을 때의 false 가 글자로 찍히지 않게 제거
   }));
   body.dataset.sig = sig;
   body.scrollTop = 0;

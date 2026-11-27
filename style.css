@@ -288,6 +288,15 @@ button.chip { cursor: pointer; color: inherit; }
 .memo-passage__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; }
 .memo-passage__actions { display: flex; flex-wrap: wrap; gap: 6px; } /* 버튼 3개를 가로로 나란히 (좁으면 줄바꿈) */
 .memo-passage__actions .btn { padding: 4px 12px; min-height: 36px; }
+.verse-viewer { border: 1px solid var(--c-border); border-radius: var(--radius); padding: 8px 12px 10px; display: grid; gap: 6px; }
+.verse-viewer[hidden], .verse-viewer__ref[hidden], .verse-viewer .field__control[hidden] { display: none; }
+.verse-viewer__title { margin: 0; }
+.verse-viewer__ref { margin: 0; font-weight: 700; }
+.verse-viewer__body { max-height: 30vh; max-height: 30dvh; overflow-y: auto; overscroll-behavior: contain; font-family: var(--font-read); line-height: 1.7; } /* 아이폰 키보드가 화면 절반을 가리므로 높이를 제한하고 안에서만 스크롤 */
+.verse-viewer__verse { margin: 0 0 6px; overflow-wrap: anywhere; }
+.verse-viewer__verse:lang(en) { word-spacing: .15em; }
+.verse-viewer__gap { margin: 0 0 6px; color: var(--c-muted); }
+.verse-viewer__num { font-size: .75rem; color: var(--c-muted); margin-right: 2px; }
 .passage-view__verse { margin: 0 0 6px; padding: 2px 6px; border-radius: 4px; }
 .passage-view__verse--linked { background: color-mix(in srgb, var(--c-select) 40%, transparent); border-left: 4px solid var(--c-primary); font-weight: 600; } /* 색 외에 선·굵기로도 구분 */
 .passage-view__num { font-size: .75rem; color: var(--c-muted); margin-right: 2px; }

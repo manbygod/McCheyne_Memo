@@ -452,6 +452,23 @@ function validateBookText(data, book) {
   return { chapters };
 }
 
+/** 메모에 담은 말씀 → "말씀 보기" 목록 [{key, bookId, chapter, verses(오름차순)}] (순수 함수). 같은 책·장은 합치고 말씀을 추가한 순서를 유지.
+ * 선택한 절이 모두 합쳐 2절 미만이면 볼 것이 없으므로 빈 배열 (한 절은 "말씀 추가" 미리보기가 보여 줌) */
+function viewerChapters(passages) {
+  const byKey = new Map();
+  for (const p of passages) {
+    const key = `${p.bookId}.${p.chapter}`;
+    const cur = byKey.get(key) ?? { key, bookId: p.bookId, chapter: p.chapter, verses: new Set() };
+    p.verses.forEach((n) => cur.verses.add(n));
+    byKey.set(key, cur);
+  }
+  const list = [...byKey.values()].map((c) => ({ ...c, verses: [...c.verses].sort((x, y) => x - y) }));
+  return list.reduce((sum, c) => sum + c.verses.length, 0) >= 2 ? list : [];
+}
+
+/** "미가 2장" / "Micah 2" — 장 단위 이름 */
+const chapterLabel = (book, lang, chapter) => `${bookName(book, lang)} ${chapter}${lang === 'en' ? '' : '장'}`;
+
 /* ================= 상태 ================= */
 const state = {
   books: [], plan: null, labels: [], memos: [], tombstones: {}, remote: null, auth: null, user: null, fbCfg: null, fb: null, // fb = {db, fs}: 기도방(prayer.js)이 같은 Firestore 연결을 씀
@@ -1268,6 +1285,66 @@ function renderDraft() {
       h('label', { class: 'check', for: id },
         h('input', { type: 'checkbox', id, name: 'label', value: label, checked: d.labels.has(label) }), label));
   }));
+  renderVerseViewer();
+}
+
+let viewerToken = 0;
+/** "말씀 보기" 블록: 선택한 절이 2절 이상일 때만 보이고, 고른 장에서 선택한 절만 스크롤해서 보여 줌.
+ * 내용(장·절·언어·번역)이 그대로면 다시 그리지 않아 스크롤 위치가 유지됨. 연속 호출 시 마지막 호출만 반영 */
+async function renderVerseViewer() {
+  const d = state.draft;
+  const root = $('#verse-viewer');
+  const list = viewerChapters(d.passages);
+  root.hidden = !list.length;
+  if (!list.length) return;
+  const sel = $('#verse-viewer-chapter');
+  const optSig = list.map((c) => c.key).join();
+  if (sel.dataset.sig !== optSig) {
+    sel.lang = d.lang; // 이름이 메모 언어로 표기되므로 올바른 음성으로 낭독
+    mount(sel, list.map((c) => h('option', { value: c.key }, chapterLabel(bookById(c.bookId), d.lang, c.chapter))));
+    sel.dataset.sig = optSig;
+  }
+  const cur = list.find((c) => c.key === sel.value) ?? list[0];
+  sel.value = cur.key;
+  const book = bookById(cur.bookId);
+  const name = chapterLabel(book, d.lang, cur.chapter);
+  sel.hidden = list.length < 2; // 장이 하나뿐이면 고를 것이 없으므로 이름만 보여 줌
+  const ref = $('#verse-viewer-ref');
+  ref.hidden = list.length > 1;
+  ref.lang = d.lang;
+  ref.textContent = name;
+
+  const body = $('#verse-viewer-body');
+  const sig = [cur.key, cur.verses.join(), d.lang, state.version].join('|');
+  if (body.dataset.sig === sig) return;
+  const token = ++viewerToken;
+  let verses = null;
+  try { verses = await loadChapter(cur.bookId, cur.chapter, d.lang); } catch { /* 아래에서 안내 */ }
+  if (token !== viewerToken) return;
+  const byNum = new Map((verses ?? []).filter((v) => v.text).map((v) => [v.n, v.text]));
+  const shown = cur.verses.filter((n) => byNum.has(n));
+  body.lang = d.lang;
+  if (!shown.length) {
+    delete body.dataset.sig; // 다음에 다시 불러오도록
+    body.removeAttribute('aria-label');
+    mount(body, h('p', {}, '본문을 불러오지 못했습니다.'));
+    return;
+  }
+  body.setAttribute('aria-label', d.lang === 'en' ? `${name}, selected verses ${shown.join(', ')}` : `${name} 선택한 말씀 ${shown.map((n) => `${n}절`).join(', ')}`);
+  let prev = null;
+  mount(body, shown.flatMap((n) => {
+    const gap = prev !== null && n - prev > 1; // 건너뛴 절이 있으면 "…" 로 표시 (절 번호로도 알 수 있으므로 낭독에서는 제외)
+    prev = n;
+    return [
+      gap && h('p', { class: 'verse-viewer__gap', 'aria-hidden': 'true' }, '…'),
+      h('p', { class: 'verse-viewer__verse' },
+        h('span', { class: 'verse-viewer__num' }, n),
+        d.lang === 'en' ? null : h('span', { class: 'visually-hidden' }, '절'),
+        ' ', byNum.get(n)),
+    ];
+  }));
+  body.dataset.sig = sig;
+  body.scrollTop = 0;
 }
 
 /** 메모 언어 → 반대 언어로 볼 때 쓸 가져오기 번역 (영어 메모는 개역개정, 한국어 메모는 NIV). 버튼 이름(label)은 가져오기 여부와 상관없이 고정 */
@@ -2313,6 +2390,8 @@ document.addEventListener('change', (e) => {
     applyRangeEnd(Number(e.target.value));
   } else if (e.target.id === 'add-book') {
     syncPicker({ chapter: todayPicks().find((p) => p.bookId === e.target.value)?.chapter ?? 1 });
+  } else if (e.target.id === 'verse-viewer-chapter') {
+    renderVerseViewer();
   } else if (e.target.id === 'add-chapter') {
     syncPicker({ chapter: Number(e.target.value) });
   } else if (e.target.id === 'add-verse') {
